@@ -12,12 +12,11 @@ window.customCards.push({
 });
 
 /**
- * 2. THE VISUAL EDITOR (Fixed with safety guards)
+ * 2. THE VISUAL EDITOR
  */
 class RabbitRSSEditor extends HTMLElement {
   constructor() {
     super();
-    // Pre-seed the config object to prevent 'undefined' crashes
     this._config = { 
       title: "Rabbit RSS", 
       feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"] 
@@ -34,14 +33,10 @@ class RabbitRSSEditor extends HTMLElement {
   }
 
   _render() {
-    // LAYER 1 GUARD: If the card hasn't received config yet, stop and show nothing
     if (!this._config) return;
-    
-    // LAYER 2 GUARD: Check for the property itself
     const cardTitle = this._config.title !== undefined ? this._config.title : "Rabbit RSS";
     const feeds = this._config.feeds || [];
 
-    // Only render the HTML if it hasn't been built yet to maintain input focus
     if (this._rendered) return;
 
     this.innerHTML = `
@@ -89,7 +84,6 @@ class RabbitRSSEditor extends HTMLElement {
       </div>
     `;
 
-    // Manually attach listeners to the native elements
     this.querySelector('#title-input').addEventListener('change', (e) => {
       this._updateConfig({ title: e.target.value });
     });
@@ -104,7 +98,7 @@ class RabbitRSSEditor extends HTMLElement {
 
     this.querySelector('#add-feed').addEventListener('click', () => {
       const newFeeds = [...(this._config.feeds || []), ""];
-      this._rendered = false; // Allow re-render for new row
+      this._rendered = false; 
       this._updateConfig({ feeds: newFeeds });
     });
 
@@ -147,11 +141,20 @@ class RabbitRSSCard extends HTMLElement {
   }
 
   setConfig(config) {
+    // Check if feeds changed specifically to avoid unnecessary fetches
+    const oldFeeds = JSON.stringify(this._config?.feeds);
+    const newFeeds = JSON.stringify(config.feeds);
+    
     this._config = config || {};
+    
     if (this.headerTitle) {
       this.headerTitle.innerText = this._config.title || "Rabbit RSS";
     }
-    this._fetchRSS();
+
+    // TRIGGER IMMEDIATE FETCH if the feeds list changed
+    if (oldFeeds !== newFeeds && this.content) {
+      this._fetchRSS();
+    }
   }
 
   set hass(hass) {
@@ -189,22 +192,27 @@ class RabbitRSSCard extends HTMLElement {
 
   async _fetchRSS() {
     const feeds = (this._config && this._config.feeds) || [];
-    if (feeds.length === 0) return;
+    const validFeeds = feeds.filter(url => url && url.trim().startsWith("http"));
+    
+    if (validFeeds.length === 0) {
+      if (this.content) this.content.innerHTML = `<div style="padding:20px;">No valid feeds configured.</div>`;
+      return;
+    }
 
     try {
-      const promises = feeds
-        .filter(url => url && url.trim() !== "")
-        .map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`)
+      const promises = validFeeds.map(url => 
+        fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`)
           .then(res => res.json())
           .catch(() => ({ status: 'error' }))
-        );
+      );
 
       const results = await Promise.all(promises);
       let allItems = [];
 
       results.forEach(data => {
         if (data.status === 'ok') {
-          allItems = [...allItems, ...data.items.map(item => ({ ...item, source: data.feed.title }))];
+          const feedTitle = data.feed.title || "RSS Feed";
+          allItems = [...allItems, ...data.items.map(item => ({ ...item, source: feedTitle }))];
         }
       });
 
