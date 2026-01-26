@@ -1,19 +1,19 @@
 /**
- * Rabbit RSS Card - Home Assistant Custom Card
+ * Rabbit RSS Card
+ * GitHub: https://github.com/jamesmcginnis/rabbit-rss-card
  */
 
-// 1. Tell Home Assistant about the card so it shows in the picker
+// 1. REGISTER THE CARD FOR THE PICKER
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "rabbit-rss-card",
-  name: "Rabbit RSS Reader",
-  description: "A sleek RSS reader with a visual configuration editor.",
+  name: "Rabbit RSS Card",
+  description: "A sleek RSS reader with a native visual editor.",
   preview: true
 });
 
 /**
- * --- THE VISUAL EDITOR ---
- * This part creates the UI you see when clicking "Configure"
+ * 2. THE VISUAL EDITOR (The UI that appears when you click 'Configure')
  */
 class RabbitRSSEditor extends HTMLElement {
   setConfig(config) {
@@ -37,15 +37,15 @@ class RabbitRSSEditor extends HTMLElement {
           style="width: 100%; display: block; margin-bottom: 20px;"
         ></ha-textfield>
         
-        <ha-formfield label="Dark Mode">
+        <ha-formfield label="Force Dark Mode">
           <ha-switch
             .checked=${this._config.dark_mode === true}
             .configValue="${'dark_mode'}"
             @change="${this._valueChanged}"
           ></ha-switch>
         </ha-formfield>
-        <p style="font-size: 0.8em; color: var(--secondary-text-color);">
-          Note: Some RSS feeds may require a proxy if they block direct browser access.
+        <p style="font-size: 0.8em; color: var(--secondary-text-color); margin-top: 15px;">
+          Tip: Most RSS feeds update every 30-60 minutes.
         </p>
       </div>
     `;
@@ -56,7 +56,7 @@ class RabbitRSSEditor extends HTMLElement {
     const target = ev.target;
     const value = target.tagName === 'HA-SWITCH' ? target.checked : target.value;
     
-    // Fire the config-changed event to let Home Assistant save the settings
+    // Dispatch event to save configuration to Home Assistant
     const event = new CustomEvent("config-changed", {
       detail: { config: { ...this._config, [target.configValue]: value } },
       bubbles: true,
@@ -69,23 +69,24 @@ customElements.define("rabbit-rss-editor", RabbitRSSEditor);
 
 
 /**
- * --- THE MAIN CARD ---
+ * 3. THE MAIN CARD LOGIC
  */
 class RabbitRSSCard extends HTMLElement {
-  // Link the card to its editor
+  // Link to the editor defined above
   static getConfigElement() {
     return document.createElement("rabbit-rss-editor");
   }
 
+  // Default settings for a new card
   static getStubConfig() {
     return { 
-        url: "https://news.ycombinator.com/rss", 
-        dark_mode: false 
+      url: "https://news.ycombinator.com/rss", 
+      dark_mode: false 
     };
   }
 
   setConfig(config) {
-    if (!config.url) throw new Error("Please enter an RSS URL");
+    if (!config.url) throw new Error("Please enter an RSS URL in the editor.");
     this._config = config;
   }
 
@@ -100,19 +101,29 @@ class RabbitRSSCard extends HTMLElement {
   _init() {
     this.innerHTML = `
       <style>
-        ha-card { padding: 0; overflow: hidden; height: 100%; }
-        .card-header { padding: 16px; font-weight: bold; font-size: 1.2em; background: var(--primary-color); color: white; }
-        .article-list { max-height: 400px; overflow-y: auto; }
-        .article { padding: 12px 16px; border-bottom: 1px solid var(--divider-color); cursor: pointer; transition: background 0.2s; }
+        ha-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; }
+        .header { padding: 16px; font-weight: bold; font-size: 1.1em; background: var(--primary-color); color: white; display: flex; justify-content: space-between; }
+        .article-list { max-height: 450px; overflow-y: auto; background: var(--card-background-color); }
+        .article { 
+          padding: 12px 16px; 
+          border-bottom: 1px solid var(--divider-color); 
+          cursor: pointer; 
+          transition: background 0.2s;
+          display: flex;
+          flex-direction: column;
+        }
         .article:hover { background: rgba(var(--rgb-primary-text-color), 0.05); }
-        .title { font-weight: 500; line-height: 1.3; margin-bottom: 4px; display: block; }
-        .meta { font-size: 0.75em; color: var(--secondary-text-color); }
-        .dark-mode-active { background: #1c1c1c !important; color: #eee !important; }
-        .dark-mode-active .article { border-color: #333; }
-        .dark-mode-active .meta { color: #999; }
+        .title { font-weight: 500; color: var(--primary-text-color); line-height: 1.4; margin-bottom: 4px; }
+        .meta { font-size: 0.8em; color: var(--secondary-text-color); }
+        
+        /* Dark Mode Overrides */
+        .forced-dark { --card-background-color: #1c1c1c; --primary-text-color: #e1e1e1; --secondary-text-color: #999; --divider-color: #333; }
       </style>
       <ha-card id="container">
-        <div class="card-header">Rabbit RSS</div>
+        <div class="header">
+          <span>Rabbit RSS</span>
+          <ha-icon icon="mdi:rss"></ha-icon>
+        </div>
         <div id="content" class="article-list">Loading feed...</div>
       </ha-card>
     `;
@@ -123,36 +134,40 @@ class RabbitRSSCard extends HTMLElement {
 
   async _fetchRSS() {
     try {
+      // Using rss2json as a proxy to avoid CORS issues in the browser
       const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(this._config.url)}`);
       const data = await response.json();
+      
       if (data.status === 'ok') {
-        this._renderArticles(data.items);
+        this._render(data.items);
       } else {
-        this.content.innerHTML = `<div style="padding:16px;">Feed could not be loaded.</div>`;
+        this.content.innerHTML = `<div style="padding:20px;">Unable to load feed. Check the URL.</div>`;
       }
     } catch (e) {
-      this.content.innerHTML = `<div style="padding:16px;">Error: ${e.message}</div>`;
+      this.content.innerHTML = `<div style="padding:20px;">Error: ${e.message}</div>`;
     }
   }
 
-  _renderArticles(articles) {
+  _render(articles) {
     this.content.innerHTML = articles.map(item => `
       <div class="article" onclick="window.open('${item.link}', '_blank')">
         <span class="title">${item.title}</span>
-        <div class="meta">${new Date(item.pubDate).toLocaleDateString()} • ${item.author || 'RSS'}</div>
+        <span class="meta">${new Date(item.pubDate).toLocaleDateString()} • ${item.author || 'News'}</span>
       </div>
     `).join('');
   }
 
   _updateTheme() {
     if (this._config.dark_mode) {
-      this.container.classList.add('dark-mode-active');
+      this.container.classList.add('forced-dark');
     } else {
-      this.container.classList.remove('dark-mode-active');
+      this.container.classList.remove('forced-dark');
     }
   }
 
-  getCardSize() { return 4; }
+  getCardSize() {
+    return 4;
+  }
 }
 
 customElements.define("rabbit-rss-card", RabbitRSSCard);
