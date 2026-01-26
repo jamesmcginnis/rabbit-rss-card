@@ -1,173 +1,221 @@
-class RabbitRSSCard extends HTMLElement {
-  constructor() {
-    super();
-    this.state = {
-      feeds: JSON.parse(localStorage.getItem('rss-feeds')) || [{ url: 'https://news.ycombinator.com/rss', name: 'Hacker News' }],
-      articles: [],
-      readArticles: new Set(JSON.parse(localStorage.getItem('rss-read-articles')) || []),
-      expandedArticle: null,
-      showEditor: false,
-      loading: false
-    };
+// --- THE EDITOR COMPONENT ---
+class RabbitRSSEditor extends HTMLElement {
+  setConfig(config) {
+    this._config = config;
   }
 
   set hass(hass) {
     this._hass = hass;
-    if (!this.content) {
-      this.init();
-    }
+    this.render();
+  }
+
+  render() {
+    if (!this._config) return;
+    
+    this.innerHTML = `
+      <div class="card-config">
+        <div style="margin-bottom: 20px;">
+          <p>Manage your RSS Feeds (URLs):</p>
+          <div id="feeds-container">
+            ${(this._config.feeds || []).map((feed, idx) => `
+              <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <ha-textfield 
+                  label="Feed URL" 
+                  value="${feed}" 
+                  style="flex: 1;" 
+                  data-idx="${idx}"
+                ></ha-textfield>
+                <ha-icon-button
+                  .index=${idx}
+                  class="remove-feed"
+                  style="--mdc-icon-size: 24px;"
+                ><ha-icon icon="mdi:delete"></ha-icon></ha-icon-button>
+              </div>
+            `).join('')}
+          </div>
+          <ha-button id="add-feed" raised>+ Add Feed</ha-button>
+        </div>
+
+        <hr>
+
+        <div style="margin-top: 20px;">
+          <ha-formfield label="Force Dark Mode">
+            <ha-switch id="dark-mode" .checked=${this._config.dark_mode}></ha-switch>
+          </ha-formfield>
+        </div>
+      </div>
+    `;
+
+    this.querySelectorAll('ha-textfield').forEach(el => {
+      el.addEventListener('change', (ev) => this._updateFeed(ev));
+    });
+
+    this.querySelectorAll('.remove-feed').forEach(el => {
+      el.addEventListener('click', (ev) => this._removeFeed(ev));
+    });
+
+    this.querySelector('#add-feed').addEventListener('click', () => this._addFeed());
+    
+    this.querySelector('#dark-mode').addEventListener('change', (ev) => {
+      this._updateConfig({ dark_mode: ev.target.checked });
+    });
+  }
+
+  _updateFeed(ev) {
+    const idx = ev.target.dataset.idx;
+    const newFeeds = [...this._config.feeds];
+    newFeeds[idx] = ev.target.value;
+    this._updateConfig({ feeds: newFeeds });
+  }
+
+  _addFeed() {
+    const newFeeds = [...(this._config.feeds || []), ""];
+    this._updateConfig({ feeds: newFeeds });
+  }
+
+  _removeFeed(ev) {
+    const idx = ev.currentTarget.index;
+    const newFeeds = [...this._config.feeds];
+    newFeeds.splice(idx, 1);
+    this._updateConfig({ feeds: newFeeds });
+  }
+
+  _updateConfig(newValues) {
+    const event = new CustomEvent("config-changed", {
+      detail: { config: { ...this._config, ...newValues } },
+      bubbles: true,
+      composed: true,
+    });
+    this.dispatchEvent(event);
+  }
+}
+customElements.define("rabbit-rss-editor", RabbitRSSEditor);
+
+
+// --- THE MAIN CARD COMPONENT ---
+class RabbitRSSCard extends HTMLElement {
+  static getConfigElement() {
+    return document.createElement("rabbit-rss-editor");
+  }
+
+  static getStubConfig() {
+    return { feeds: ["https://news.ycombinator.com/rss"], dark_mode: false };
+  }
+
+  setConfig(config) {
+    this._config = config;
+    if (this.content) this.fetchFeeds();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (!this.content) this.init();
   }
 
   init() {
     this.innerHTML = `
       <style>
         :host {
-          --rss-card-bg: var(--ha-card-background, var(--card-background-color, white));
-          --rss-primary-text: var(--primary-text-color);
-          --rss-secondary-text: var(--secondary-text-color);
-          --rss-accent: var(--primary-color, #3b82f6);
+          --rss-bg: var(--ha-card-background, var(--card-background-color, white));
+          --rss-text: var(--primary-text-color);
+          --rss-subtext: var(--secondary-text-color);
         }
-        .rss-container { 
-          background: var(--rss-card-bg); 
-          color: var(--rss-primary-text);
-          border-radius: var(--ha-card-border-radius, 12px);
-          overflow: hidden;
-          font-family: sans-serif;
+        .dark-theme {
+          --rss-bg: #1c1c1c;
+          --rss-text: #ffffff;
+          --rss-subtext: #aaaaaa;
         }
-        .line-clamp-2 {
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
+        ha-card {
+          background: var(--rss-bg);
+          color: var(--rss-text);
+          padding: 16px;
+          height: 100%;
         }
+        .header { font-size: 1.2em; font-weight: bold; margin-bottom: 12px; display: flex; justify-content: space-between; }
+        .article { padding: 10px 0; border-bottom: 1px solid var(--divider-color); cursor: pointer; }
+        .article:last-child { border: none; }
+        .title { font-weight: 500; line-height: 1.2; }
+        .meta { font-size: 0.8em; color: var(--rss-subtext); margin-top: 4px; }
+        .modal {
+          position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+          background: var(--rss-bg); z-index: 1000; padding: 20px;
+          display: none; flex-direction: column;
+        }
+        .modal.open { display: flex; }
       </style>
-      <ha-card class="rss-container">
-        <div id="app-root"></div>
+      <ha-card id="card-container">
+        <div class="header">
+           <span>Rabbit RSS</span>
+           <ha-icon icon="mdi:rss" style="color: var(--primary-color);"></ha-icon>
+        </div>
+        <div id="articles">Loading...</div>
       </ha-card>
+      <div id="modal" class="modal">
+         <ha-button id="close-btn">‚Üê Back</ha-button>
+         <div id="modal-content" style="margin-top:20px; overflow-y: auto;"></div>
+      </div>
     `;
-    this.content = this.querySelector('#app-root');
-    this.render();
+    this.content = this.querySelector('#articles');
+    this.container = this.querySelector('#card-container');
+    this.modal = this.querySelector('#modal');
+    
+    this.querySelector('#close-btn').addEventListener('click', () => {
+      this.modal.classList.remove('open');
+    });
+
     this.fetchFeeds();
   }
 
   async fetchFeeds() {
-    this.state.loading = true;
-    this.render();
+    if (!this._config.feeds) return;
     
-    let allArticles = [];
-    for (const feed of this.state.feeds) {
-      try {
-        const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(feed.url)}`);
-        const data = await response.json();
-        if (data.items) {
-          allArticles.push(...data.items.map(item => ({
-            ...item,
-            feedName: feed.name,
-            id: btoa(item.link).substring(0, 16) // Simplified ID
-          })));
-        }
-      } catch (e) { console.error("Feed error", e); }
+    if (this._config.dark_mode) {
+      this.container.classList.add('dark-theme');
+      this.modal.classList.add('dark-theme');
+    } else {
+      this.container.classList.remove('dark-theme');
+      this.modal.classList.remove('dark-theme');
     }
-    
-    this.state.articles = allArticles.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-    this.state.loading = false;
-    this.render();
+
+    let allArticles = [];
+    for (const url of this._config.feeds) {
+      try {
+        const res = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+        if (data.items) allArticles.push(...data.items);
+      } catch (e) { console.error(e); }
+    }
+
+    allArticles.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+    this.renderArticles(allArticles);
   }
 
-  render() {
-    if (!this.content) return;
-
-    this.content.innerHTML = `
-      <div class="p-4 bg-blue-600 text-white flex justify-between items-center">
-        <h2 class="font-bold">Rabbit RSS</h2>
-        <button id="toggle-settings" class="p-1 hover:bg-white/20 rounded">Settings</button>
+  renderArticles(articles) {
+    this.content.innerHTML = articles.map((art, idx) => `
+      <div class="article" data-idx="${idx}">
+        <div class="title">${art.title}</div>
+        <div class="meta">${new Date(art.pubDate).toLocaleDateString()}</div>
       </div>
+    `).join('');
 
-      ${this.state.showEditor ? this.renderEditor() : ''}
-
-      <div class="articles-list" style="max-height: 500px; overflow-y: auto;">
-        ${this.state.loading ? '<div class="p-10 text-center">Loading...</div>' : 
-          this.state.articles.map((art, idx) => `
-          <div class="article-item p-4 border-b cursor-pointer hover:bg-black/5 ${this.state.readArticles.has(art.id) ? 'opacity-50' : ''}" 
-               data-idx="${idx}">
-            <div class="flex gap-3">
-              ${art.thumbnail ? `<img src="${art.thumbnail}" class="w-16 h-16 rounded object-cover">` : ''}
-              <div>
-                <div class="font-bold line-clamp-2">${art.title}</div>
-                <div class="text-sm opacity-70">${art.feedName} • ${new Date(art.pubDate).toLocaleDateString()}</div>
-              </div>
-            </div>
-          </div>
-        `).join('')}
-      </div>
-
-      ${this.state.expandedArticle ? this.renderModal() : ''}
-    `;
-
-    this.attachEventListeners();
-  }
-
-  renderEditor() {
-    return `
-      <div class="p-4 bg-gray-100 dark:bg-gray-800 border-b">
-        <div class="text-sm font-bold mb-2">Manage Feeds</div>
-        ${this.state.feeds.map((f, i) => `
-          <div class="flex gap-2 mb-2">
-            <input class="flex-1 p-1 text-black" value="${f.url}" placeholder="URL" data-feed-idx="${i}">
-            <button class="remove-feed text-red-500" data-idx="${i}">?</button>
-          </div>
-        `).join('')}
-        <button id="add-feed" class="text-blue-500 text-sm">+ Add Feed</button>
-      </div>
-    `;
-  }
-
-  renderModal() {
-    const art = this.state.expandedArticle;
-    return `
-      <div class="fixed inset-0 z-50 bg-white dark:bg-gray-900 overflow-y-auto p-4">
-        <button id="close-modal" class="mb-4 p-2 bg-gray-200 dark:bg-gray-700 rounded">? Back</button>
-        <h1 class="text-xl font-bold mb-2">${art.title}</h1>
-        <div class="opacity-70 mb-4">${art.feedName}</div>
-        <div class="prose dark:prose-invert">${art.description}</div>
-        <a href="${art.link}" target="_blank" class="block mt-6 p-3 bg-blue-600 text-center text-white rounded">Read Original</a>
-      </div>
-    `;
-  }
-
-  attachEventListeners() {
-    this.querySelector('#toggle-settings')?.addEventListener('click', () => {
-      this.state.showEditor = !this.state.showEditor;
-      this.render();
-    });
-
-    this.querySelectorAll('.article-item').forEach(el => {
+    this.querySelectorAll('.article').forEach(el => {
       el.addEventListener('click', () => {
-        const art = this.state.articles[el.dataset.idx];
-        this.state.expandedArticle = art;
-        this.state.readArticles.add(art.id);
-        localStorage.setItem('rss-read-articles', JSON.stringify([...this.state.readArticles]));
-        this.render();
+        const art = articles[el.dataset.idx];
+        this.openModal(art);
       });
     });
+  }
 
-    this.querySelector('#close-modal')?.addEventListener('click', () => {
-      this.state.expandedArticle = null;
-      this.render();
-    });
-
-    this.querySelector('#add-feed')?.addEventListener('click', () => {
-      this.state.feeds.push({ url: '', name: 'New Feed' });
-      this.render();
-    });
-
-    this.querySelectorAll('.remove-feed').forEach(el => {
-      el.addEventListener('click', () => {
-        this.state.feeds.splice(el.dataset.idx, 1);
-        localStorage.setItem('rss-feeds', JSON.stringify(this.state.feeds));
-        this.render();
-      });
-    });
+  openModal(art) {
+    const content = this.querySelector('#modal-content');
+    content.innerHTML = `
+      <h2>${art.title}</h2>
+      <p style="color: var(--rss-subtext)">${art.author || 'RSS Feed'}</p>
+      <hr>
+      <div style="margin: 20px 0;">${art.description}</div>
+      <ha-button raised onclick="window.open('${art.link}', '_blank')">Open Original Article</ha-button>
+    `;
+    this.modal.classList.add('open');
   }
 
   getCardSize() { return 4; }
