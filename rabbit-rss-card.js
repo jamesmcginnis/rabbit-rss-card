@@ -184,7 +184,6 @@ class RabbitRSSCard extends HTMLElement {
     this.container.style.backgroundColor = this._config.bg_color || "#ffffff";
     this.content.style.backgroundColor = this._config.bg_color || "#ffffff";
     
-    // Set custom CSS variables for article items
     this.container.style.setProperty('--article-title-color', this._config.title_text_color || "#000000");
     this.container.style.setProperty('--article-meta-color', this._config.meta_text_color || "#666666");
   }
@@ -199,7 +198,8 @@ class RabbitRSSCard extends HTMLElement {
       <style>
         ha-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; transition: all 0.3s ease; }
         .header { padding: 16px; font-weight: bold; font-size: 1.1em; display: flex; justify-content: space-between; align-items: center; }
-        .refresh-btn { cursor: pointer; }
+        .refresh-btn { cursor: pointer; transition: transform 0.2s; }
+        .refresh-btn:active { transform: rotate(180deg); }
         .article-list { max-height: 450px; overflow-y: auto; }
         .article { padding: 12px 16px; border-bottom: 1px solid var(--divider-color); cursor: pointer; display: flex; flex-direction: column; text-decoration: none; }
         .article:hover { background: rgba(125, 125, 125, 0.1); }
@@ -218,7 +218,9 @@ class RabbitRSSCard extends HTMLElement {
     this.container = this.querySelector("#card-container");
     this.headerTitle = this.querySelector("#header-title");
     
-    this.querySelector("#refresh-icon").addEventListener("click", () => this._fetchRSS());
+    // Re-bind click event directly to the element
+    this.querySelector("#refresh-icon").onclick = () => this._fetchRSS();
+    
     this._applyStyles();
     this._fetchRSS();
   }
@@ -230,6 +232,10 @@ class RabbitRSSCard extends HTMLElement {
       if (this.content) this.content.innerHTML = `<div style="padding:20px;">No valid feeds.</div>`;
       return;
     }
+    
+    // Show a quick visual feedback that refresh started
+    if (this.content) this.content.style.opacity = "0.5";
+
     try {
       const promises = validFeeds.map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`).then(res => res.json()));
       const results = await Promise.all(promises);
@@ -243,6 +249,8 @@ class RabbitRSSCard extends HTMLElement {
       this._render(allItems);
     } catch (e) {
       if(this.content) this.content.innerHTML = `<div style="padding:20px;">Error loading feeds.</div>`;
+    } finally {
+      if (this.content) this.content.style.opacity = "1";
     }
   }
 
