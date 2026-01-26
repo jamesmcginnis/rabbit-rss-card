@@ -17,8 +17,11 @@ window.customCards.push({
  */
 class RabbitRSSEditor extends HTMLElement {
   setConfig(config) {
-    this._config = { title: "Rabbit RSS", feeds: [], ...config };
-    this._render(); // Force re-render when config changes
+    this._config = { 
+      title: "Rabbit RSS", 
+      feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"], 
+      ...config 
+    };
   }
 
   set hass(hass) {
@@ -29,14 +32,14 @@ class RabbitRSSEditor extends HTMLElement {
   _render() {
     if (!this._hass || !this._config) return;
 
-    // We build the HTML string every time to ensure the toggle/fields are exactly what's in the code
+    // Use a unique ID to prevent re-rendering from wiping out focus
     this.innerHTML = `
       <div class="card-config" style="padding: 10px; display: flex; flex-direction: column; gap: 15px;">
         <ha-textfield
           label="Card Title"
-          .value="${this._config.title || ''}"
+          .value="${this._config.title}"
           .configValue="${'title'}"
-          @input="${this._valueChanged}"
+          @change="${this._valueChanged}"
           style="width: 100%;"
         ></ha-textfield>
 
@@ -48,13 +51,13 @@ class RabbitRSSEditor extends HTMLElement {
                 placeholder="https://example.com/rss"
                 .value="${url}"
                 .index="${idx}"
-                @input="${this._feedChanged}"
+                @change="${this._feedChanged}"
                 style="flex-grow: 1;"
               ></ha-textfield>
               <ha-icon-button
                 .index="${idx}"
                 @click="${this._removeFeed}"
-                style="color: var(--error-color);"
+                style="color: var(--error-color); cursor: pointer;"
               >
                 <ha-icon icon="mdi:delete"></ha-icon>
               </ha-icon-button>
@@ -62,7 +65,7 @@ class RabbitRSSEditor extends HTMLElement {
           `).join('')}
         </div>
         
-        <ha-button @click="${this._addFeed}" raised style="align-self: flex-start; margin-top: 10px;">
+        <ha-button @click="${this._addFeed}" raised style="align-self: flex-start; margin-top: 10px; cursor: pointer;">
           + Add Feed URL
         </ha-button>
       </div>
@@ -70,6 +73,7 @@ class RabbitRSSEditor extends HTMLElement {
   }
 
   _valueChanged(ev) {
+    if (!this._config) return;
     this._updateConfig({ [ev.target.configValue]: ev.target.value });
   }
 
@@ -113,7 +117,7 @@ class RabbitRSSCard extends HTMLElement {
   static getStubConfig() {
     return { 
       title: "Rabbit RSS",
-      feeds: ["https://news.ycombinator.com/rss"]
+      feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"]
     };
   }
 
@@ -139,8 +143,7 @@ class RabbitRSSCard extends HTMLElement {
         ha-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; }
         .header { padding: 16px; font-weight: bold; font-size: 1.1em; background: var(--primary-color); color: white; display: flex; justify-content: space-between; align-items: center; }
         .header-actions { display: flex; align-items: center; gap: 8px; }
-        .refresh-btn { cursor: pointer; transition: transform 0.2s; }
-        .refresh-btn:active { transform: rotate(15deg); }
+        .refresh-btn { cursor: pointer; }
         .article-list { max-height: 450px; overflow-y: auto; background: var(--card-background-color); }
         .article { padding: 12px 16px; border-bottom: 1px solid var(--divider-color); cursor: pointer; display: flex; flex-direction: column; }
         .article:hover { background: rgba(var(--rgb-primary-text-color), 0.05); }
@@ -168,18 +171,16 @@ class RabbitRSSCard extends HTMLElement {
   async _fetchRSS() {
     const feeds = this._config.feeds || [];
     if (feeds.length === 0) {
-      this.content.innerHTML = `<div style="padding:20px;">No feeds configured. Add one in the editor!</div>`;
+      this.content.innerHTML = `<div style="padding:20px;">No feeds configured.</div>`;
       return;
     }
 
-    this.content.innerHTML = `<div style="padding:20px;">Updating feeds...</div>`;
-    
     try {
       const promises = feeds
         .filter(url => url && url.trim() !== "")
         .map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`)
           .then(res => res.json())
-          .catch(err => ({ status: 'error', message: err.message }))
+          .catch(() => ({ status: 'error' }))
         );
 
       const results = await Promise.all(promises);
@@ -188,21 +189,19 @@ class RabbitRSSCard extends HTMLElement {
       results.forEach(data => {
         if (data.status === 'ok') {
           const feedTitle = data.feed.title || "RSS Feed";
-          const itemsWithSource = data.items.map(item => ({ ...item, source: feedTitle }));
-          allItems = [...allItems, ...itemsWithSource];
+          allItems = [...allItems, ...data.items.map(item => ({ ...item, source: feedTitle }))];
         }
       });
 
-      // Sort newest first
       allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
 
       if (allItems.length > 0) {
         this._render(allItems);
       } else {
-        this.content.innerHTML = `<div style="padding:20px;">No articles found. Check your URLs.</div>`;
+        this.content.innerHTML = `<div style="padding:20px;">No articles found.</div>`;
       }
     } catch (e) {
-      this.content.innerHTML = `<div style="padding:20px;">Error: ${e.message}</div>`;
+      this.content.innerHTML = `<div style="padding:20px;">Error loading feeds.</div>`;
     }
   }
 
