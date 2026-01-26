@@ -17,7 +17,7 @@ window.customCards.push({
  */
 class RabbitRSSEditor extends HTMLElement {
   setConfig(config) {
-    this._config = { ...config };
+    this._config = config;
   }
 
   set hass(hass) {
@@ -26,6 +26,8 @@ class RabbitRSSEditor extends HTMLElement {
   }
 
   _render() {
+    // Safety check: if config isn't loaded yet, don't render the editor UI
+    if (!this._config) return;
     if (this._rendered) return;
 
     this.innerHTML = `
@@ -94,11 +96,11 @@ class RabbitRSSCard extends HTMLElement {
 
   setConfig(config) {
     const oldUrl = this._config?.url;
-    this._config = config;
+    this._config = config || {}; // Safety: fallback to empty object
 
     if (this.container) {
       this._updateDisplay();
-      if (oldUrl !== config.url) {
+      if (oldUrl !== this._config.url) {
         this._fetchRSS();
       }
     }
@@ -112,6 +114,8 @@ class RabbitRSSCard extends HTMLElement {
   }
 
   _init() {
+    if (!this._config) return;
+
     this.innerHTML = `
       <style>
         ha-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; }
@@ -125,17 +129,20 @@ class RabbitRSSCard extends HTMLElement {
         .title { font-weight: 500; color: var(--primary-text-color); line-height: 1.4; margin-bottom: 4px; }
         .meta { font-size: 0.8em; color: var(--secondary-text-color); }
         
-        ha-card.dark-theme {
+        /* DARK MODE STYLES */
+        #container.dark-theme {
           background-color: #1c1c1c !important;
+          color: white !important;
           --card-background-color: #1c1c1c;
-          --primary-text-color: #e1e1e1;
-          --secondary-text-color: #999;
-          --divider-color: #333;
+          --primary-text-color: #ffffff;
+          --secondary-text-color: #aaaaaa;
+          --divider-color: #333333;
         }
+        #container.dark-theme .article-list { background-color: #1c1c1c !important; }
       </style>
       <ha-card id="container">
         <div class="header">
-          <span id="header-title"></span>
+          <span id="header-title">${this._config.title || "Rabbit RSS"}</span>
           <div class="header-actions">
             <ha-icon id="refresh-icon" class="refresh-btn" icon="mdi:refresh"></ha-icon>
             <ha-icon icon="mdi:rss"></ha-icon>
@@ -155,10 +162,11 @@ class RabbitRSSCard extends HTMLElement {
   }
 
   _updateDisplay() {
-    if (!this.container) return;
+    if (!this.container || !this._config) return;
+    
     this.headerTitle.innerText = this._config.title || "Rabbit RSS";
 
-    if (this._config.dark_mode) {
+    if (this._config.dark_mode === true) {
       this.container.classList.add('dark-theme');
     } else {
       this.container.classList.remove('dark-theme');
@@ -166,7 +174,7 @@ class RabbitRSSCard extends HTMLElement {
   }
 
   async _fetchRSS() {
-    if (!this._config.url) return;
+    if (!this._config || !this._config.url) return;
     this.content.innerHTML = `<div style="padding:20px;">Updating...</div>`;
     try {
       const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(this._config.url)}&cache_boost=${Date.now()}`);
