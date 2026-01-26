@@ -16,8 +16,14 @@ window.customCards.push({
  * 2. THE VISUAL EDITOR
  */
 class RabbitRSSEditor extends HTMLElement {
+  constructor() {
+    super();
+    // Initialize config so it's never undefined
+    this._config = { title: "Rabbit RSS", url: "", dark_mode: false };
+  }
+
   setConfig(config) {
-    this._config = config;
+    this._config = { ...this._config, ...config };
   }
 
   set hass(hass) {
@@ -26,8 +32,10 @@ class RabbitRSSEditor extends HTMLElement {
   }
 
   _render() {
-    // Safety check: if config isn't loaded yet, don't render the editor UI
-    if (!this._config) return;
+    // CRITICAL FIX: Guard against undefined config
+    if (!this._hass || !this._config) return;
+    
+    // Only render the UI once to prevent input flicker
     if (this._rendered) return;
 
     this.innerHTML = `
@@ -95,8 +103,9 @@ class RabbitRSSCard extends HTMLElement {
   }
 
   setConfig(config) {
+    if (!config) return;
     const oldUrl = this._config?.url;
-    this._config = config || {}; // Safety: fallback to empty object
+    this._config = config;
 
     if (this.container) {
       this._updateDisplay();
@@ -118,7 +127,7 @@ class RabbitRSSCard extends HTMLElement {
 
     this.innerHTML = `
       <style>
-        ha-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; }
+        ha-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; transition: background 0.3s ease; }
         .header { padding: 16px; font-weight: bold; font-size: 1.1em; background: var(--primary-color); color: white; display: flex; justify-content: space-between; align-items: center; }
         .header-actions { display: flex; align-items: center; gap: 8px; }
         .refresh-btn { cursor: pointer; transition: transform 0.2s; }
@@ -129,7 +138,6 @@ class RabbitRSSCard extends HTMLElement {
         .title { font-weight: 500; color: var(--primary-text-color); line-height: 1.4; margin-bottom: 4px; }
         .meta { font-size: 0.8em; color: var(--secondary-text-color); }
         
-        /* DARK MODE STYLES */
         #container.dark-theme {
           background-color: #1c1c1c !important;
           color: white !important;
@@ -163,7 +171,6 @@ class RabbitRSSCard extends HTMLElement {
 
   _updateDisplay() {
     if (!this.container || !this._config) return;
-    
     this.headerTitle.innerText = this._config.title || "Rabbit RSS";
 
     if (this._config.dark_mode === true) {
