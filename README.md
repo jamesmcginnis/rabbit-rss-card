@@ -3,6 +3,7 @@
 A sleek, multi-feed RSS reader for Home Assistant with a built-in visual editor and deep color customization.
 
 ![JavaScript](https://img.shields.io/badge/JavaScript-Module-yellow.svg)
+![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)
 
 ## Features
 
@@ -15,6 +16,18 @@ A sleek, multi-feed RSS reader for Home Assistant with a built-in visual editor 
 
 ## Installation
 
+### HACS Installation (Recommended)
+
+1. Open HACS in your Home Assistant instance
+2. Click on **Frontend**
+3. Click the **three dots** in the top right corner and select **Custom repositories**
+4. Add the repository URL: `https://github.com/jamesmcginnis/rabbit-rss-card`
+5. Select category: **Lovelace**
+6. Click **Add**
+7. Find **Rabbit RSS Card** in the list and click **Download**
+8. Restart Home Assistant
+9. Clear your browser cache
+
 ### Manual Installation
 
 1. Download the `rabbit-rss-card.js` file from this repository
@@ -25,10 +38,6 @@ A sleek, multi-feed RSS reader for Home Assistant with a built-in visual editor 
    - Click **Add Resource**
    - Set the URL to `/local/rabbit-rss-card.js` and the type to **JavaScript Module**
 4. Refresh your browser (clear cache if necessary)
-
-### HACS Installation (Coming Soon)
-
-Support for Home Assistant Community Store (HACS) is planned for a future release.
 
 ## Configuration
 
@@ -144,6 +153,7 @@ The article list has a default maximum height of 450px. When content exceeds thi
 - Clear your browser cache and refresh the page
 - Check that the file path is correct (`/local/rabbit-rss-card.js`)
 - Verify the resource type is set to "JavaScript Module"
+- If using HACS, ensure you've restarted Home Assistant after installation
 
 ### Visual editor not working?
 
@@ -168,7 +178,7 @@ If you encounter any issues or have questions:
 
 ## Roadmap
 
-- [ ] HACS integration
+- [x] HACS integration
 - [ ] Configurable article limit per feed
 - [ ] Custom date formatting options
 - [ ] Feed health indicators
