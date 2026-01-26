@@ -19,7 +19,7 @@ class RabbitRSSEditor extends HTMLElement {
     super();
     this._config = { 
       title: "Rabbit RSS", 
-      feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"],
+      feeds: ["https://feeds.bbci.co.uk/news/world/rss.xml"],
       header_color: "#03a9f4",
       header_text_color: "#ffffff",
       bg_color: "#ffffff",
@@ -154,7 +154,7 @@ class RabbitRSSCard extends HTMLElement {
   static getStubConfig() {
     return { 
       title: "Rabbit RSS",
-      feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"],
+      feeds: ["https://feeds.bbci.co.uk/news/world/rss.xml"],
       header_color: "#03a9f4",
       header_text_color: "#ffffff",
       bg_color: "#ffffff",
@@ -166,7 +166,7 @@ class RabbitRSSCard extends HTMLElement {
   setConfig(config) {
     this._config = config || {};
     this._applyStyles();
-    this._fetchRSS();
+    if (this.content) this._fetchRSS();
   }
 
   _applyStyles() {
@@ -183,7 +183,9 @@ class RabbitRSSCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (!this.content) this._init();
+    if (!this.content) {
+      this._init();
+    }
   }
 
   _init() {
@@ -204,7 +206,7 @@ class RabbitRSSCard extends HTMLElement {
           <span id="header-title"></span>
           <ha-icon id="refresh-icon" class="refresh-btn" icon="mdi:refresh"></ha-icon>
         </div>
-        <div id="content" class="article-list">Loading feeds...</div>
+        <div id="content" class="article-list">Initializing...</div>
       </ha-card>
     `;
     this.content = this.querySelector("#content");
@@ -218,16 +220,20 @@ class RabbitRSSCard extends HTMLElement {
   async _fetchRSS() {
     const feeds = (this._config && this._config.feeds) || [];
     const validFeeds = feeds.filter(url => url && url.trim().startsWith("http"));
-    if (validFeeds.length === 0) return;
-    if (this.content) this.content.style.opacity = "0.5";
+    
+    if (validFeeds.length === 0) {
+      this.content.innerHTML = `<div style="padding:20px;">No URLs provided.</div>`;
+      return;
+    }
+    
+    this.content.style.opacity = "0.5";
 
     try {
       const promises = validFeeds.map(url => {
-        // We use a cleaner fetch URL and ensure no whitespace impacts the request
-        const cleanUrl = url.trim();
-        return fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(cleanUrl)}&api_key=00000000000000000000000000000000&cache_boost=${Date.now()}`)
+        const fetchUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url.trim())}&cache_boost=${Date.now()}`;
+        return fetch(fetchUrl)
           .then(res => res.json())
-          .catch(() => ({ status: 'error' }));
+          .catch(err => ({ status: 'error', message: err.message }));
       });
 
       const results = await Promise.all(promises);
@@ -240,21 +246,21 @@ class RabbitRSSCard extends HTMLElement {
         }
       });
 
-      allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-      this._render(allItems);
+      if (allItems.length > 0) {
+        allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+        this._render(allItems);
+      } else {
+        this.content.innerHTML = `<div style="padding:20px;">Feeds returned no data. Check your URLs or Ad-blocker.</div>`;
+      }
     } catch (e) {
-      if(this.content) this.content.innerHTML = `<div style="padding:20px;">Error loading.</div>`;
+      this.content.innerHTML = `<div style="padding:20px;">Connection Error.</div>`;
     } finally {
-      if (this.content) this.content.style.opacity = "1";
+      this.content.style.opacity = "1";
     }
   }
 
   _render(articles) {
     if (!this.content) return;
-    if (articles.length === 0) {
-        this.content.innerHTML = `<div style="padding:20px;">No articles found. Some feeds (like Sky News) may require a manual refresh or can be blocked by ad-blockers.</div>`;
-        return;
-    }
     this.content.innerHTML = articles.map(item => `
       <div class="article" onclick="window.open('${item.link}', '_blank')">
         <span class="title">${item.title}</span>
