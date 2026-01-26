@@ -164,9 +164,13 @@ class RabbitRSSCard extends HTMLElement {
   }
 
   setConfig(config) {
+    const oldFeeds = JSON.stringify(this._config?.feeds);
     this._config = config || {};
     this._applyStyles();
-    this._fetchRSS();
+
+    if (oldFeeds !== JSON.stringify(config.feeds) && this.content) {
+      this._fetchRSS();
+    }
   }
 
   _applyStyles() {
@@ -214,6 +218,7 @@ class RabbitRSSCard extends HTMLElement {
     this.container = this.querySelector("#card-container");
     this.headerTitle = this.querySelector("#header-title");
     
+    // Re-bind click event directly to the element
     this.querySelector("#refresh-icon").onclick = () => this._fetchRSS();
     
     this._applyStyles();
@@ -222,34 +227,24 @@ class RabbitRSSCard extends HTMLElement {
 
   async _fetchRSS() {
     const feeds = (this._config && this._config.feeds) || [];
-    // Only fetch URLs that actually look like URLs
     const validFeeds = feeds.filter(url => url && url.trim().startsWith("http"));
-    
     if (validFeeds.length === 0) {
-      if (this.content) this.content.innerHTML = `<div style="padding:20px;">No valid feeds configured.</div>`;
+      if (this.content) this.content.innerHTML = `<div style="padding:20px;">No valid feeds.</div>`;
       return;
     }
     
+    // Show a quick visual feedback that refresh started
     if (this.content) this.content.style.opacity = "0.5";
 
     try {
-      const promises = validFeeds.map(url => 
-        fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`)
-          .then(res => res.json())
-          .catch(() => ({ status: 'error' }))
-      );
-
+      const promises = validFeeds.map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`).then(res => res.json()));
       const results = await Promise.all(promises);
       let allItems = [];
-
       results.forEach(data => {
         if (data.status === 'ok') {
-          const feedTitle = data.feed.title || "RSS Feed";
-          allItems = [...allItems, ...data.items.map(item => ({ ...item, source: feedTitle }))];
+          allItems = [...allItems, ...data.items.map(item => ({ ...item, source: data.feed.title }))];
         }
       });
-
-      // Sort by date: newest first
       allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
       this._render(allItems);
     } catch (e) {
@@ -261,10 +256,6 @@ class RabbitRSSCard extends HTMLElement {
 
   _render(articles) {
     if (!this.content) return;
-    if (articles.length === 0) {
-        this.content.innerHTML = `<div style="padding:20px;">No articles found.</div>`;
-        return;
-    }
     this.content.innerHTML = articles.map(item => `
       <div class="article" onclick="window.open('${item.link}', '_blank')">
         <span class="title">${item.title}</span>
