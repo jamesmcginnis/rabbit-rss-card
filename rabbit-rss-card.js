@@ -172,14 +172,11 @@ class RabbitRSSCard extends HTMLElement {
   _applyStyles() {
     if (!this.container) return;
     this.headerTitle.innerText = this._config.title || "Rabbit RSS";
-    
     const header = this.querySelector(".header");
     header.style.backgroundColor = this._config.header_color || "#03a9f4";
     header.style.color = this._config.header_text_color || "#ffffff";
-    
     this.container.style.backgroundColor = this._config.bg_color || "#ffffff";
     this.content.style.backgroundColor = this._config.bg_color || "#ffffff";
-    
     this.container.style.setProperty('--article-title-color', this._config.title_text_color || "#000000");
     this.container.style.setProperty('--article-meta-color', this._config.meta_text_color || "#666666");
   }
@@ -213,28 +210,20 @@ class RabbitRSSCard extends HTMLElement {
     this.content = this.querySelector("#content");
     this.container = this.querySelector("#card-container");
     this.headerTitle = this.querySelector("#header-title");
-    
     this.querySelector("#refresh-icon").onclick = () => this._fetchRSS();
-    
     this._applyStyles();
     this._fetchRSS();
   }
 
   async _fetchRSS() {
     const feeds = (this._config && this._config.feeds) || [];
-    // Only fetch URLs that actually look like URLs
     const validFeeds = feeds.filter(url => url && url.trim().startsWith("http"));
-    
-    if (validFeeds.length === 0) {
-      if (this.content) this.content.innerHTML = `<div style="padding:20px;">No valid feeds configured.</div>`;
-      return;
-    }
-    
+    if (validFeeds.length === 0) return;
     if (this.content) this.content.style.opacity = "0.5";
 
     try {
       const promises = validFeeds.map(url => 
-        fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`)
+        fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url.trim())}&cache_boost=${Date.now()}`)
           .then(res => res.json())
           .catch(() => ({ status: 'error' }))
       );
@@ -244,16 +233,15 @@ class RabbitRSSCard extends HTMLElement {
 
       results.forEach(data => {
         if (data.status === 'ok') {
-          const feedTitle = data.feed.title || "RSS Feed";
+          const feedTitle = data.feed.title || "News";
           allItems = [...allItems, ...data.items.map(item => ({ ...item, source: feedTitle }))];
         }
       });
 
-      // Sort by date: newest first
       allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
       this._render(allItems);
     } catch (e) {
-      if(this.content) this.content.innerHTML = `<div style="padding:20px;">Error loading feeds.</div>`;
+      if(this.content) this.content.innerHTML = `<div style="padding:20px;">Error loading.</div>`;
     } finally {
       if (this.content) this.content.style.opacity = "1";
     }
@@ -262,7 +250,7 @@ class RabbitRSSCard extends HTMLElement {
   _render(articles) {
     if (!this.content) return;
     if (articles.length === 0) {
-        this.content.innerHTML = `<div style="padding:20px;">No articles found.</div>`;
+        this.content.innerHTML = `<div style="padding:20px;">No articles found. Check your RSS URLs.</div>`;
         return;
     }
     this.content.innerHTML = articles.map(item => `
