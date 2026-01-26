@@ -8,7 +8,7 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "rabbit-rss-card",
   name: "Rabbit RSS Card",
-  description: "A sleek RSS reader with a native visual editor.",
+  description: "A multi-feed RSS reader with a native visual editor.",
   preview: true
 });
 
@@ -16,14 +16,8 @@ window.customCards.push({
  * 2. THE VISUAL EDITOR
  */
 class RabbitRSSEditor extends HTMLElement {
-  constructor() {
-    super();
-    // Initialize config so it's never undefined
-    this._config = { title: "Rabbit RSS", url: "", dark_mode: false };
-  }
-
   setConfig(config) {
-    this._config = { ...this._config, ...config };
+    this._config = { title: "Rabbit RSS", feeds: [], ...config };
   }
 
   set hass(hass) {
@@ -32,11 +26,7 @@ class RabbitRSSEditor extends HTMLElement {
   }
 
   _render() {
-    // CRITICAL FIX: Guard against undefined config
     if (!this._hass || !this._config) return;
-    
-    // Only render the UI once to prevent input flicker
-    if (this._rendered) return;
 
     this.innerHTML = `
       <div class="card-config" style="padding: 10px; display: flex; flex-direction: column; gap: 15px;">
@@ -48,36 +38,60 @@ class RabbitRSSEditor extends HTMLElement {
           style="width: 100%;"
         ></ha-textfield>
 
-        <ha-textfield
-          label="RSS Feed URL"
-          .value="${this._config.url || ''}"
-          .configValue="${'url'}"
-          @input="${this._valueChanged}"
-          style="width: 100%;"
-        ></ha-textfield>
+        <div style="font-weight: bold; margin-top: 10px;">RSS Feeds</div>
+        <div id="feeds-list" style="display: flex; flex-direction: column; gap: 10px;">
+          ${(this._config.feeds || []).map((url, idx) => `
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <ha-textfield
+                placeholder="https://example.com/rss"
+                .value="${url}"
+                .index="${idx}"
+                @input="${this._feedChanged}"
+                style="flex-grow: 1;"
+              ></ha-textfield>
+              <ha-icon-button
+                .index="${idx}"
+                @click="${this._removeFeed}"
+                style="--mdc-icon-size: 20px; color: var(--error-color);"
+              >
+                <ha-icon icon="mdi:delete"></ha-icon>
+              </ha-icon-button>
+            </div>
+          `).join('')}
+        </div>
         
-        <ha-formfield label="Force Dark Mode">
-          <ha-switch
-            .checked=${this._config.dark_mode === true}
-            .configValue="${'dark_mode'}"
-            @change="${this._valueChanged}"
-          ></ha-switch>
-        </ha-formfield>
+        <ha-button @click="${this._addFeed}" raised style="align-self: flex-start;">
+          Add Feed
+        </ha-button>
       </div>
     `;
-    this._rendered = true;
   }
 
   _valueChanged(ev) {
-    if (!this._config || !this._hass) return;
-    const target = ev.target;
-    const value = target.tagName === 'HA-SWITCH' ? target.checked : target.value;
-    
-    const newConfig = { ...this._config };
-    newConfig[target.configValue] = value;
+    this._updateConfig({ [ev.target.configValue]: ev.target.value });
+  }
 
+  _feedChanged(ev) {
+    const feeds = [...this._config.feeds];
+    feeds[ev.target.index] = ev.target.value;
+    this._updateConfig({ feeds });
+  }
+
+  _addFeed() {
+    const feeds = [...(this._config.feeds || []), ""];
+    this._updateConfig({ feeds });
+  }
+
+  _removeFeed(ev) {
+    const index = ev.currentTarget.index;
+    const feeds = [...this._config.feeds];
+    feeds.splice(index, 1);
+    this._updateConfig({ feeds });
+  }
+
+  _updateConfig(newValues) {
     const event = new CustomEvent("config-changed", {
-      detail: { config: newConfig },
+      detail: { config: { ...this._config, ...newValues } },
       bubbles: true,
       composed: true,
     });
@@ -97,21 +111,16 @@ class RabbitRSSCard extends HTMLElement {
   static getStubConfig() {
     return { 
       title: "Rabbit RSS",
-      url: "https://news.ycombinator.com/rss", 
-      dark_mode: false 
+      feeds: ["https://news.ycombinator.com/rss"]
     };
   }
 
   setConfig(config) {
     if (!config) return;
-    const oldUrl = this._config?.url;
     this._config = config;
-
     if (this.container) {
-      this._updateDisplay();
-      if (oldUrl !== this._config.url) {
-        this._fetchRSS();
-      }
+      this.headerTitle.innerText = this._config.title || "Rabbit RSS";
+      this._fetchRSS();
     }
   }
 
@@ -123,30 +132,17 @@ class RabbitRSSCard extends HTMLElement {
   }
 
   _init() {
-    if (!this._config) return;
-
     this.innerHTML = `
       <style>
-        ha-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; transition: background 0.3s ease; }
+        ha-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; }
         .header { padding: 16px; font-weight: bold; font-size: 1.1em; background: var(--primary-color); color: white; display: flex; justify-content: space-between; align-items: center; }
         .header-actions { display: flex; align-items: center; gap: 8px; }
-        .refresh-btn { cursor: pointer; transition: transform 0.2s; }
-        .refresh-btn:active { transform: rotate(180deg); }
+        .refresh-btn { cursor: pointer; }
         .article-list { max-height: 450px; overflow-y: auto; background: var(--card-background-color); }
         .article { padding: 12px 16px; border-bottom: 1px solid var(--divider-color); cursor: pointer; display: flex; flex-direction: column; }
         .article:hover { background: rgba(var(--rgb-primary-text-color), 0.05); }
         .title { font-weight: 500; color: var(--primary-text-color); line-height: 1.4; margin-bottom: 4px; }
         .meta { font-size: 0.8em; color: var(--secondary-text-color); }
-        
-        #container.dark-theme {
-          background-color: #1c1c1c !important;
-          color: white !important;
-          --card-background-color: #1c1c1c;
-          --primary-text-color: #ffffff;
-          --secondary-text-color: #aaaaaa;
-          --divider-color: #333333;
-        }
-        #container.dark-theme .article-list { background-color: #1c1c1c !important; }
       </style>
       <ha-card id="container">
         <div class="header">
@@ -156,7 +152,7 @@ class RabbitRSSCard extends HTMLElement {
             <ha-icon icon="mdi:rss"></ha-icon>
           </div>
         </div>
-        <div id="content" class="article-list">Loading feed...</div>
+        <div id="content" class="article-list">Loading feeds...</div>
       </ha-card>
     `;
     this.content = this.querySelector("#content");
@@ -164,32 +160,41 @@ class RabbitRSSCard extends HTMLElement {
     this.headerTitle = this.querySelector("#header-title");
     
     this.querySelector("#refresh-icon").addEventListener("click", () => this._fetchRSS());
-
-    this._updateDisplay();
     this._fetchRSS();
   }
 
-  _updateDisplay() {
-    if (!this.container || !this._config) return;
-    this.headerTitle.innerText = this._config.title || "Rabbit RSS";
-
-    if (this._config.dark_mode === true) {
-      this.container.classList.add('dark-theme');
-    } else {
-      this.container.classList.remove('dark-theme');
-    }
-  }
-
   async _fetchRSS() {
-    if (!this._config || !this._config.url) return;
-    this.content.innerHTML = `<div style="padding:20px;">Updating...</div>`;
+    const feeds = this._config.feeds || [];
+    if (feeds.length === 0) {
+      this.content.innerHTML = `<div style="padding:20px;">No feeds configured.</div>`;
+      return;
+    }
+
+    this.content.innerHTML = `<div style="padding:20px;">Updating all feeds...</div>`;
+    
     try {
-      const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(this._config.url)}&cache_boost=${Date.now()}`);
-      const data = await response.json();
-      if (data.status === 'ok') {
-        this._render(data.items);
+      const promises = feeds
+        .filter(url => url.trim() !== "")
+        .map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`).then(res => res.json()));
+
+      const results = await Promise.all(promises);
+      let allItems = [];
+
+      results.forEach(data => {
+        if (data.status === 'ok') {
+          // Add feed name to each item for clarity
+          const itemsWithSource = data.items.map(item => ({ ...item, source: data.feed.title }));
+          allItems = [...allItems, ...itemsWithSource];
+        }
+      });
+
+      // Sort by date (newest first)
+      allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+
+      if (allItems.length > 0) {
+        this._render(allItems);
       } else {
-        this.content.innerHTML = `<div style="padding:20px;">Unable to load feed. Check URL.</div>`;
+        this.content.innerHTML = `<div style="padding:20px;">No articles found.</div>`;
       }
     } catch (e) {
       this.content.innerHTML = `<div style="padding:20px;">Error: ${e.message}</div>`;
@@ -200,7 +205,7 @@ class RabbitRSSCard extends HTMLElement {
     this.content.innerHTML = articles.map(item => `
       <div class="article" onclick="window.open('${item.link}', '_blank')">
         <span class="title">${item.title}</span>
-        <span class="meta">${new Date(item.pubDate).toLocaleDateString()} • ${item.author || 'News'}</span>
+        <span class="meta">${new Date(item.pubDate).toLocaleDateString()} • ${item.source}</span>
       </div>
     `).join('');
   }
