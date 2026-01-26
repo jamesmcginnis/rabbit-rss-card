@@ -3,7 +3,6 @@
  * GitHub: https://github.com/jamesmcginnis/rabbit-rss-card
  */
 
-// 1. REGISTER THE CARD
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "rabbit-rss-card",
@@ -13,9 +12,14 @@ window.customCards.push({
 });
 
 /**
- * 2. THE VISUAL EDITOR
+ * 2. THE VISUAL EDITOR (With Shadow DOM for click stability)
  */
 class RabbitRSSEditor extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+  }
+
   setConfig(config) {
     this._config = { 
       title: "Rabbit RSS", 
@@ -30,44 +34,77 @@ class RabbitRSSEditor extends HTMLElement {
   }
 
   _render() {
-    if (!this._hass || !this._config) return;
+    if (!this._config) return;
 
-    // Use a unique ID to prevent re-rendering from wiping out focus
-    this.innerHTML = `
-      <div class="card-config" style="padding: 10px; display: flex; flex-direction: column; gap: 15px;">
-        <ha-textfield
-          label="Card Title"
-          .value="${this._config.title}"
-          .configValue="${'title'}"
-          @change="${this._valueChanged}"
-          style="width: 100%;"
-        ></ha-textfield>
-
-        <div style="font-weight: bold; margin-top: 10px; border-bottom: 1px solid var(--divider-color); padding-bottom: 5px;">RSS Feeds</div>
-        <div id="feeds-list" style="display: flex; flex-direction: column; gap: 12px;">
-          ${(this._config.feeds || []).map((url, idx) => `
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <ha-textfield
-                placeholder="https://example.com/rss"
-                .value="${url}"
-                .index="${idx}"
-                @change="${this._feedChanged}"
-                style="flex-grow: 1;"
-              ></ha-textfield>
-              <ha-icon-button
-                .index="${idx}"
-                @click="${this._removeFeed}"
-                style="color: var(--error-color); cursor: pointer;"
-              >
-                <ha-icon icon="mdi:delete"></ha-icon>
-              </ha-icon-button>
-            </div>
-          `).join('')}
+    // Use ShadowRoot to ensure inputs are clickable and isolated
+    this.shadowRoot.innerHTML = `
+      <style>
+        .card-config {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          color: var(--primary-text-color);
+          font-family: var(--paper-font-body1_-_font-family, inherit);
+        }
+        .feed-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+        ha-textfield {
+          flex-grow: 1;
+          display: block;
+        }
+        .header-label {
+          font-weight: 500;
+          font-size: 14px;
+          margin-bottom: 4px;
+        }
+        ha-button {
+          align-self: flex-start;
+          cursor: pointer;
+        }
+        ha-icon-button {
+          --mdc-icon-size: 20px;
+          color: var(--error-color);
+          cursor: pointer;
+        }
+      </style>
+      <div class="card-config">
+        <div>
+          <div class="header-label">Card Title</div>
+          <ha-textfield
+            .value="${this._config.title}"
+            .configValue="${'title'}"
+            @change="${this._valueChanged}"
+          ></ha-textfield>
         </div>
-        
-        <ha-button @click="${this._addFeed}" raised style="align-self: flex-start; margin-top: 10px; cursor: pointer;">
-          + Add Feed URL
-        </ha-button>
+
+        <div>
+          <div class="header-label">RSS Feeds</div>
+          <div id="feeds-list">
+            ${(this._config.feeds || []).map((url, idx) => `
+              <div class="feed-row">
+                <ha-textfield
+                  placeholder="https://example.com/rss"
+                  .value="${url}"
+                  .index="${idx}"
+                  @change="${this._feedChanged}"
+                ></ha-textfield>
+                <ha-icon-button
+                  .index="${idx}"
+                  @click="${this._removeFeed}"
+                >
+                  <ha-icon icon="mdi:delete"></ha-icon>
+                </ha-icon-button>
+              </div>
+            `).join('')}
+          </div>
+          <ha-button @click="${this._addFeed}" raised>
+            + Add Feed URL
+          </ha-button>
+        </div>
       </div>
     `;
   }
@@ -123,11 +160,18 @@ class RabbitRSSCard extends HTMLElement {
 
   setConfig(config) {
     if (!config) return;
+    const oldFeeds = JSON.stringify(this._config?.feeds);
+    const newFeeds = JSON.stringify(config.feeds);
+
     this._config = config;
+
     if (this.headerTitle) {
       this.headerTitle.innerText = this._config.title || "Rabbit RSS";
     }
-    this._fetchRSS();
+
+    if (oldFeeds !== newFeeds) {
+      this._fetchRSS();
+    }
   }
 
   set hass(hass) {
@@ -170,7 +214,7 @@ class RabbitRSSCard extends HTMLElement {
 
   async _fetchRSS() {
     const feeds = this._config.feeds || [];
-    if (feeds.length === 0) {
+    if (feeds.length === 0 || (feeds.length === 1 && feeds[0] === "")) {
       this.content.innerHTML = `<div style="padding:20px;">No feeds configured.</div>`;
       return;
     }
