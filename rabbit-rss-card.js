@@ -222,13 +222,11 @@ class RabbitRSSCard extends HTMLElement {
     if (this.content) this.content.style.opacity = "0.5";
 
     try {
-      const promises = validFeeds.map(url => {
-        // We use a cleaner fetch URL and ensure no whitespace impacts the request
-        const cleanUrl = url.trim();
-        return fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(cleanUrl)}&api_key=00000000000000000000000000000000&cache_boost=${Date.now()}`)
+      const promises = validFeeds.map(url => 
+        fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url.trim())}&cache_boost=${Date.now()}`)
           .then(res => res.json())
-          .catch(() => ({ status: 'error' }));
-      });
+          .catch(() => ({ status: 'error' }))
+      );
 
       const results = await Promise.all(promises);
       let allItems = [];
@@ -252,7 +250,7 @@ class RabbitRSSCard extends HTMLElement {
   _render(articles) {
     if (!this.content) return;
     if (articles.length === 0) {
-        this.content.innerHTML = `<div style="padding:20px;">No articles found. Some feeds (like Sky News) may require a manual refresh or can be blocked by ad-blockers.</div>`;
+        this.content.innerHTML = `<div style="padding:20px;">No articles found. Check your RSS URLs.</div>`;
         return;
     }
     this.content.innerHTML = articles.map(item => `
