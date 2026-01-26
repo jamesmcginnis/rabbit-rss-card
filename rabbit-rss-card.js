@@ -12,12 +12,12 @@ window.customCards.push({
 });
 
 /**
- * 2. THE VISUAL EDITOR
+ * 2. THE VISUAL EDITOR (Fixed with safety guards)
  */
 class RabbitRSSEditor extends HTMLElement {
   constructor() {
     super();
-    // Initialize with defaults immediately to prevent "undefined" errors
+    // Pre-seed the config object to prevent 'undefined' crashes
     this._config = { 
       title: "Rabbit RSS", 
       feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"] 
@@ -25,7 +25,7 @@ class RabbitRSSEditor extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = { ...this._config, ...config };
+    this._config = config || {};
   }
 
   set hass(hass) {
@@ -34,46 +34,52 @@ class RabbitRSSEditor extends HTMLElement {
   }
 
   _render() {
-    // Only render if we have a config and haven't rendered yet
-    if (!this._config || this._rendered) return;
+    // LAYER 1 GUARD: If the card hasn't received config yet, stop and show nothing
+    if (!this._config) return;
+    
+    // LAYER 2 GUARD: Check for the property itself
+    const cardTitle = this._config.title !== undefined ? this._config.title : "Rabbit RSS";
+    const feeds = this._config.feeds || [];
+
+    // Only render the HTML if it hasn't been built yet to maintain input focus
+    if (this._rendered) return;
 
     this.innerHTML = `
       <style>
         .card-config { padding: 10px; font-family: sans-serif; display: flex; flex-direction: column; gap: 12px; }
-        .config-label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; color: var(--primary-text-color); }
+        .config-label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
         .input-box { 
           width: 100%; 
           padding: 10px; 
-          border: 1px solid var(--divider-color, #ccc); 
+          border: 1px solid #ccc; 
           border-radius: 4px; 
           box-sizing: border-box;
-          background: var(--card-background-color, white);
-          color: var(--primary-text-color, black);
+          background: white;
+          color: black;
         }
-        .feed-row { display: flex; align-items: center; gap: 10px; }
+        .feed-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
         .btn { 
           padding: 8px 12px; 
           cursor: pointer; 
-          background: var(--primary-color, #03a9f4); 
+          background: #03a9f4; 
           color: white; 
           border: none; 
           border-radius: 4px; 
-          white-space: nowrap;
         }
         .btn-delete { background: #f44336; }
       </style>
       <div class="card-config">
         <div>
           <label class="config-label">Card Title</label>
-          <input type="text" class="input-box" id="title-input" value="${this._config.title || ''}">
+          <input type="text" class="input-box" id="title-input" value="${cardTitle}">
         </div>
 
         <div>
           <label class="config-label">RSS Feeds</label>
-          <div id="feeds-container" style="display: flex; flex-direction: column; gap: 8px;">
-            ${(this._config.feeds || []).map((url, idx) => `
+          <div id="feeds-container">
+            ${feeds.map((url, idx) => `
               <div class="feed-row">
-                <input type="text" class="input-box feed-input" data-index="${idx}" value="${url}">
+                <input type="text" class="input-box feed-input" data-index="${idx}" value="${url}" style="margin-bottom:0;">
                 <button class="btn btn-delete remove-feed" data-index="${idx}">✕</button>
               </div>
             `).join('')}
@@ -83,32 +89,31 @@ class RabbitRSSEditor extends HTMLElement {
       </div>
     `;
 
-    // Add Event Listeners manually to ensure they attach to the native inputs
+    // Manually attach listeners to the native elements
     this.querySelector('#title-input').addEventListener('change', (e) => {
       this._updateConfig({ title: e.target.value });
     });
 
     this.querySelectorAll('.feed-input').forEach(input => {
       input.addEventListener('change', (e) => {
-        const feeds = [...this._config.feeds];
-        feeds[e.target.dataset.index] = e.target.value;
-        this._updateConfig({ feeds });
+        const newFeeds = [...this._config.feeds];
+        newFeeds[e.target.dataset.index] = e.target.value;
+        this._updateConfig({ feeds: newFeeds });
       });
     });
 
     this.querySelector('#add-feed').addEventListener('click', () => {
-      const feeds = [...(this._config.feeds || []), ""];
-      this._rendered = false; // Trigger a clean re-render for the new row
-      this._updateConfig({ feeds });
+      const newFeeds = [...(this._config.feeds || []), ""];
+      this._rendered = false; // Allow re-render for new row
+      this._updateConfig({ feeds: newFeeds });
     });
 
     this.querySelectorAll('.remove-feed').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const feeds = [...this._config.feeds];
-        const index = parseInt(e.currentTarget.dataset.index);
-        feeds.splice(index, 1);
-        this._rendered = false; 
-        this._updateConfig({ feeds });
+        const newFeeds = [...this._config.feeds];
+        newFeeds.splice(e.target.dataset.index, 1);
+        this._rendered = false;
+        this._updateConfig({ feeds: newFeeds });
       });
     });
 
@@ -130,14 +135,6 @@ customElements.define("rabbit-rss-editor", RabbitRSSEditor);
  * 3. THE MAIN CARD LOGIC
  */
 class RabbitRSSCard extends HTMLElement {
-  constructor() {
-    super();
-    this._config = { 
-      title: "Rabbit RSS", 
-      feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"] 
-    };
-  }
-
   static getConfigElement() {
     return document.createElement("rabbit-rss-editor");
   }
@@ -150,8 +147,7 @@ class RabbitRSSCard extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config) return;
-    this._config = { ...this._config, ...config };
+    this._config = config || {};
     if (this.headerTitle) {
       this.headerTitle.innerText = this._config.title || "Rabbit RSS";
     }
@@ -179,7 +175,7 @@ class RabbitRSSCard extends HTMLElement {
       </style>
       <ha-card>
         <div class="header">
-          <span id="header-title">${this._config.title || "Rabbit RSS"}</span>
+          <span id="header-title">${(this._config && this._config.title) || "Rabbit RSS"}</span>
           <ha-icon id="refresh-icon" class="refresh-btn" icon="mdi:refresh"></ha-icon>
         </div>
         <div id="content" class="article-list">Loading feeds...</div>
@@ -192,20 +188,16 @@ class RabbitRSSCard extends HTMLElement {
   }
 
   async _fetchRSS() {
-    const feeds = this._config.feeds || [];
-    const validFeeds = feeds.filter(url => url && url.trim() !== "");
-    
-    if (validFeeds.length === 0) {
-      this.content.innerHTML = `<div style="padding:20px;">No feeds configured.</div>`;
-      return;
-    }
+    const feeds = (this._config && this._config.feeds) || [];
+    if (feeds.length === 0) return;
 
     try {
-      const promises = validFeeds.map(url => 
-        fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`)
+      const promises = feeds
+        .filter(url => url && url.trim() !== "")
+        .map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`)
           .then(res => res.json())
           .catch(() => ({ status: 'error' }))
-      );
+        );
 
       const results = await Promise.all(promises);
       let allItems = [];
@@ -219,11 +211,12 @@ class RabbitRSSCard extends HTMLElement {
       allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
       this._render(allItems);
     } catch (e) {
-      this.content.innerHTML = `<div style="padding:20px;">Error loading feeds.</div>`;
+      if(this.content) this.content.innerHTML = `<div style="padding:20px;">Error loading feeds.</div>`;
     }
   }
 
   _render(articles) {
+    if (!this.content) return;
     if (!articles.length) {
       this.content.innerHTML = `<div style="padding:20px;">No articles found.</div>`;
       return;
