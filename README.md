@@ -176,15 +176,6 @@ If you encounter any issues or have questions:
 2. Search existing issues on GitHub
 3. Create a new issue with detailed information about your problem
 
-## Roadmap
-
-- [x] HACS integration
-- [ ] Configurable article limit per feed
-- [ ] Custom date formatting options
-- [ ] Feed health indicators
-- [ ] Article preview/summary display
-- [ ] Refresh interval configuration
-
 ---
 
 **Made with ❤️ for the Home Assistant community**
