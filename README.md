@@ -5,6 +5,14 @@ A sleek, multi-feed RSS reader for Home Assistant with a built-in visual editor 
 ![JavaScript](https://img.shields.io/badge/JavaScript-Module-yellow.svg)
 ![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)
 
+## Previews
+
+| Card View | Visual Editor |
+| :---: | :---: |
+| ![Preview 1](Preview1.png) | ![Preview 2](Preview2.png) |
+
+---
+
 ## Features
 
 - **Multi-Feed Support**: Aggregate news from multiple sources into a single, unified list
@@ -66,116 +74,5 @@ bg_color: "#ffffff"
 title_text_color: "#000000"
 meta_text_color: "#666666"
 feeds:
-  - https://www.theverge.com/rss/index.xml
-  - https://techcrunch.com/feed/
-```
-
-### Configuration Options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `type` | string | **Required** | Must be `custom:rabbit-rss-card` |
-| `title` | string | `"Rabbit RSS"` | The title displayed in the card header |
-| `feeds` | list | `[]` | A list of RSS feed URLs |
-| `header_color` | string | `"#03a9f4"` | Background color for the header |
-| `header_text_color` | string | `"#ffffff"` | Text color for the header |
-| `bg_color` | string | `"#ffffff"` | Background color for the card body |
-| `title_text_color` | string | `"#000000"` | Text color for article titles |
-| `meta_text_color` | string | `"#666666"` | Text color for dates and sources |
-
-## Examples
-
-### News Dashboard
-
-```yaml
-type: custom:rabbit-rss-card
-title: "Daily News"
-header_color: "#1e3a8a"
-header_text_color: "#ffffff"
-feeds:
-  - https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml
-  - https://feeds.bbci.co.uk/news/rss.xml
-```
-
-### Tech News Dashboard
-
-```yaml
-type: custom:rabbit-rss-card
-title: "Tech Updates"
-header_color: "#10b981"
-header_text_color: "#ffffff"
-bg_color: "#f9fafb"
-feeds:
-  - https://www.theverge.com/rss/index.xml
-  - https://techcrunch.com/feed/
-  - https://arstechnica.com/feed/
-```
-
-### Dark Theme
-
-```yaml
-type: custom:rabbit-rss-card
-title: "Night Reader"
-header_color: "#1f2937"
-header_text_color: "#f3f4f6"
-bg_color: "#111827"
-title_text_color: "#f9fafb"
-meta_text_color: "#9ca3af"
-feeds:
-  - https://example.com/rss
-```
-
-## Technical Details
-
-### RSS Parsing
-
-This card uses the `rss2json` API to fetch and parse feeds. This approach:
-- Ensures high compatibility across different RSS versions (RSS 2.0, Atom, etc.)
-- Eliminates the need for a local proxy or server-side component
-- Works with CORS-restricted feeds
-
-### Card Height
-
-The article list has a default maximum height of 450px. When content exceeds this limit, the list becomes scrollable, keeping your dashboard clean and organized.
-
-## Troubleshooting
-
-### Feeds not loading?
-
-- Verify the URL is a valid RSS feed (must start with `http://` or `https://`)
-- Check your browser's console for error messages
-- Test the feed URL in your browser to ensure it's accessible
-- Some feeds may be incompatible with the `rss2json` service
-
-### Card not showing up?
-
-- Ensure you've added the resource correctly in Dashboard settings
-- Clear your browser cache and refresh the page
-- Check that the file path is correct (`/local/rabbit-rss-card.js`)
-- Verify the resource type is set to "JavaScript Module"
-- If using HACS, ensure you've restarted Home Assistant after installation
-
-### Visual editor not working?
-
-- Make sure you're using a recent version of Home Assistant
-- Try refreshing your browser and clearing cache
-- Check browser console for JavaScript errors
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
-
-## License
-
-This project is open source. Please check the repository for license details.
-
-## Support
-
-If you encounter any issues or have questions:
-1. Check the Troubleshooting section above
-2. Search existing issues on GitHub
-3. Create a new issue with detailed information about your problem
-
----
-
-**Made with ❤️ for the Home Assistant community**
+  - [https://www.theverge.com/rss/index.xml](https://www.theverge.com/rss/index.xml)
+  - [https://techcrunch.com/feed/](https://techcrunch.com/feed/)
