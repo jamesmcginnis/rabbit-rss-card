@@ -30,7 +30,7 @@ A sleek, multi-feed RSS reader for Home Assistant with a built-in visual editor 
 2. Click on **Frontend**
 3. Click the **three dots** in the top right corner and select **Custom repositories**
 4. Add the repository URL: `https://github.com/jamesmcginnis/rabbit-rss-card`
-5. Select category: **Lovelace**
+5. Select category: **Dashboard**
 6. Click **Add**
 7. Find **Rabbit RSS Card** in the list and click **Download**
 8. Restart Home Assistant
@@ -59,7 +59,6 @@ The Rabbit RSS Card is designed to be configured through the UI:
    - Add RSS feed URLs
    - Customize colors and appearance
    - Set your card title
-4. Save and enjoy!
 
 ### YAML Configuration (Optional)
 
