@@ -21,6 +21,7 @@ class RabbitRSSEditor extends HTMLElement {
       title: "Rabbit RSS", 
       feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"],
       refresh_interval: 30,
+      max_articles: 20,
       header_color: "#03a9f4",
       header_text_color: "#ffffff",
       bg_color: "#ffffff",
@@ -80,6 +81,16 @@ class RabbitRSSEditor extends HTMLElement {
           <div class="help-text">Feeds will automatically refresh at this interval (1-1440 minutes)</div>
         </div>
 
+        <div>
+          <label class="config-label">Maximum Articles</label>
+          <div class="interval-row">
+            <input type="number" class="number-input" id="max-articles-input" 
+                   value="${this._config.max_articles || 20}" min="1" max="100">
+            <span>articles</span>
+          </div>
+          <div class="help-text">Maximum number of articles to display (1-100)</div>
+        </div>
+
         <div class="section-title">Colors</div>
         <div class="color-grid">
           <div class="color-row">
@@ -126,6 +137,11 @@ class RabbitRSSEditor extends HTMLElement {
       const value = Math.max(1, Math.min(1440, parseInt(e.target.value) || 30));
       e.target.value = value;
       this._updateConfig({ refresh_interval: value });
+    });
+    this.querySelector('#max-articles-input').addEventListener('change', (e) => {
+      const value = Math.max(1, Math.min(100, parseInt(e.target.value) || 20));
+      e.target.value = value;
+      this._updateConfig({ max_articles: value });
     });
     this.querySelector('#header-color-picker').addEventListener('change', (e) => this._updateConfig({ header_color: e.target.value }));
     this.querySelector('#header-text-picker').addEventListener('change', (e) => this._updateConfig({ header_text_color: e.target.value }));
@@ -184,6 +200,7 @@ class RabbitRSSCard extends HTMLElement {
       title: "Rabbit RSS",
       feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"],
       refresh_interval: 30,
+      max_articles: 20,
       header_color: "#03a9f4",
       header_text_color: "#ffffff",
       bg_color: "#ffffff",
@@ -196,6 +213,7 @@ class RabbitRSSCard extends HTMLElement {
   setConfig(config) {
     const oldFeeds = JSON.stringify(this._config?.feeds);
     const oldInterval = this._config?.refresh_interval;
+    const oldMaxArticles = this._config?.max_articles;
     this._config = config || {};
     this._applyStyles();
 
@@ -206,6 +224,11 @@ class RabbitRSSCard extends HTMLElement {
     // Update auto-refresh interval if changed
     if (oldInterval !== config.refresh_interval) {
       this._setupAutoRefresh();
+    }
+
+    // Re-render if max articles changed
+    if (oldMaxArticles !== config.max_articles && this._cachedArticles) {
+      this._render(this._cachedArticles);
     }
   }
 
@@ -349,6 +372,9 @@ class RabbitRSSCard extends HTMLElement {
         }
       });
       allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+      
+      // Cache all articles for potential re-rendering with different max_articles
+      this._cachedArticles = allItems;
       this._render(allItems);
     } catch (e) {
       if(this.content) this.content.innerHTML = `<div style="padding:20px;">Error loading feeds.</div>`;
@@ -365,7 +391,12 @@ class RabbitRSSCard extends HTMLElement {
 
   _render(articles) {
     if (!this.content) return;
-    this.content.innerHTML = articles.map(item => {
+    
+    // Limit articles based on max_articles config
+    const maxArticles = this._config.max_articles || 20;
+    const displayArticles = articles.slice(0, maxArticles);
+    
+    this.content.innerHTML = displayArticles.map(item => {
       const thumbnail = item.thumbnail || item.enclosure?.link || '';
       const description = this._stripHtml(item.description || item.content || '');
       const summary = description.substring(0, 150) + (description.length > 150 ? '...' : '');
