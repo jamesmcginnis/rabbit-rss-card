@@ -20,6 +20,7 @@ class RabbitRSSEditor extends HTMLElement {
     this._config = { 
       title: "Rabbit RSS", 
       feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"],
+      refresh_interval: 30,
       header_color: "#03a9f4",
       header_text_color: "#ffffff",
       bg_color: "#ffffff",
@@ -49,6 +50,10 @@ class RabbitRSSEditor extends HTMLElement {
           width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; 
           box-sizing: border-box; background: white; color: black;
         }
+        .number-input {
+          width: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 4px;
+          box-sizing: border-box; background: white; color: black;
+        }
         .color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .color-row { display: flex; align-items: center; gap: 10px; }
         .color-picker { width: 40px; height: 30px; padding: 0; border: none; cursor: pointer; }
@@ -56,11 +61,23 @@ class RabbitRSSEditor extends HTMLElement {
         .btn { padding: 8px 12px; cursor: pointer; background: #03a9f4; color: white; border: none; border-radius: 4px; }
         .btn-delete { background: #f44336; }
         .section-title { font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 10px; }
+        .interval-row { display: flex; align-items: center; gap: 10px; }
+        .help-text { font-size: 12px; color: #666; margin-top: 5px; }
       </style>
       <div class="card-config">
         <div>
           <label class="config-label">Card Title</label>
           <input type="text" class="input-box" id="title-input" value="${this._config.title || ''}">
+        </div>
+
+        <div>
+          <label class="config-label">Refresh Interval (minutes)</label>
+          <div class="interval-row">
+            <input type="number" class="number-input" id="refresh-interval-input" 
+                   value="${this._config.refresh_interval || 30}" min="1" max="1440">
+            <span>minutes</span>
+          </div>
+          <div class="help-text">Feeds will automatically refresh at this interval (1-1440 minutes)</div>
         </div>
 
         <div class="section-title">Colors</div>
@@ -105,6 +122,11 @@ class RabbitRSSEditor extends HTMLElement {
     `;
 
     this.querySelector('#title-input').addEventListener('change', (e) => this._updateConfig({ title: e.target.value }));
+    this.querySelector('#refresh-interval-input').addEventListener('change', (e) => {
+      const value = Math.max(1, Math.min(1440, parseInt(e.target.value) || 30));
+      e.target.value = value;
+      this._updateConfig({ refresh_interval: value });
+    });
     this.querySelector('#header-color-picker').addEventListener('change', (e) => this._updateConfig({ header_color: e.target.value }));
     this.querySelector('#header-text-picker').addEventListener('change', (e) => this._updateConfig({ header_text_color: e.target.value }));
     this.querySelector('#bg-color-picker').addEventListener('change', (e) => this._updateConfig({ bg_color: e.target.value }));
@@ -161,6 +183,7 @@ class RabbitRSSCard extends HTMLElement {
     return { 
       title: "Rabbit RSS",
       feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"],
+      refresh_interval: 30,
       header_color: "#03a9f4",
       header_text_color: "#ffffff",
       bg_color: "#ffffff",
@@ -172,11 +195,17 @@ class RabbitRSSCard extends HTMLElement {
 
   setConfig(config) {
     const oldFeeds = JSON.stringify(this._config?.feeds);
+    const oldInterval = this._config?.refresh_interval;
     this._config = config || {};
     this._applyStyles();
 
     if (oldFeeds !== JSON.stringify(config.feeds) && this.content) {
       this._fetchRSS();
+    }
+
+    // Update auto-refresh interval if changed
+    if (oldInterval !== config.refresh_interval) {
+      this._setupAutoRefresh();
     }
   }
 
@@ -271,11 +300,33 @@ class RabbitRSSCard extends HTMLElement {
     this.container = this.querySelector("#card-container");
     this.headerTitle = this.querySelector("#header-title");
     
-    // Re-bind click event directly to the element
     this.querySelector("#refresh-icon").onclick = () => this._fetchRSS();
     
     this._applyStyles();
     this._fetchRSS();
+    this._setupAutoRefresh();
+  }
+
+  _setupAutoRefresh() {
+    // Clear existing interval if any
+    if (this._refreshInterval) {
+      clearInterval(this._refreshInterval);
+    }
+
+    // Set up new interval (convert minutes to milliseconds)
+    const intervalMinutes = this._config.refresh_interval || 30;
+    const intervalMs = intervalMinutes * 60 * 1000;
+    
+    this._refreshInterval = setInterval(() => {
+      this._fetchRSS();
+    }, intervalMs);
+  }
+
+  disconnectedCallback() {
+    // Clean up interval when card is removed
+    if (this._refreshInterval) {
+      clearInterval(this._refreshInterval);
+    }
   }
 
   async _fetchRSS() {
@@ -286,7 +337,6 @@ class RabbitRSSCard extends HTMLElement {
       return;
     }
     
-    // Show a quick visual feedback that refresh started
     if (this.content) this.content.style.opacity = "0.5";
 
     try {
