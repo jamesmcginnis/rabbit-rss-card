@@ -24,7 +24,8 @@ class RabbitRSSEditor extends HTMLElement {
       header_text_color: "#ffffff",
       bg_color: "#ffffff",
       title_text_color: "#000000",
-      meta_text_color: "#666666"
+      meta_text_color: "#666666",
+      summary_text_color: "#555555"
     };
   }
 
@@ -84,6 +85,10 @@ class RabbitRSSEditor extends HTMLElement {
             <input type="color" class="color-picker" id="meta-text-picker" value="${this._config.meta_text_color || '#666666'}">
             <label>Meta Text</label>
           </div>
+          <div class="color-row">
+            <input type="color" class="color-picker" id="summary-text-picker" value="${this._config.summary_text_color || '#555555'}">
+            <label>Summary Text</label>
+          </div>
         </div>
 
         <div class="section-title">RSS Feeds</div>
@@ -105,6 +110,7 @@ class RabbitRSSEditor extends HTMLElement {
     this.querySelector('#bg-color-picker').addEventListener('change', (e) => this._updateConfig({ bg_color: e.target.value }));
     this.querySelector('#title-text-picker').addEventListener('change', (e) => this._updateConfig({ title_text_color: e.target.value }));
     this.querySelector('#meta-text-picker').addEventListener('change', (e) => this._updateConfig({ meta_text_color: e.target.value }));
+    this.querySelector('#summary-text-picker').addEventListener('change', (e) => this._updateConfig({ summary_text_color: e.target.value }));
 
     this.querySelectorAll('.feed-input').forEach(input => {
       input.addEventListener('change', (e) => {
@@ -159,7 +165,8 @@ class RabbitRSSCard extends HTMLElement {
       header_text_color: "#ffffff",
       bg_color: "#ffffff",
       title_text_color: "#000000",
-      meta_text_color: "#666666"
+      meta_text_color: "#666666",
+      summary_text_color: "#555555"
     };
   }
 
@@ -186,6 +193,7 @@ class RabbitRSSCard extends HTMLElement {
     
     this.container.style.setProperty('--article-title-color', this._config.title_text_color || "#000000");
     this.container.style.setProperty('--article-meta-color', this._config.meta_text_color || "#666666");
+    this.container.style.setProperty('--article-summary-color', this._config.summary_text_color || "#555555");
   }
 
   set hass(hass) {
@@ -201,10 +209,55 @@ class RabbitRSSCard extends HTMLElement {
         .refresh-btn { cursor: pointer; transition: transform 0.2s; }
         .refresh-btn:active { transform: rotate(180deg); }
         .article-list { max-height: 450px; overflow-y: auto; }
-        .article { padding: 12px 16px; border-bottom: 1px solid var(--divider-color); cursor: pointer; display: flex; flex-direction: column; text-decoration: none; }
+        .article { 
+          padding: 12px 16px; 
+          border-bottom: 1px solid var(--divider-color); 
+          cursor: pointer; 
+          display: flex; 
+          gap: 12px;
+          text-decoration: none; 
+        }
         .article:hover { background: rgba(125, 125, 125, 0.1); }
-        .title { font-weight: 500; color: var(--article-title-color); line-height: 1.4; margin-bottom: 4px; transition: color 0.3s; }
-        .meta { font-size: 0.8em; color: var(--article-meta-color); transition: color 0.3s; }
+        .article-thumbnail { 
+          width: 120px; 
+          height: 80px; 
+          flex-shrink: 0;
+          object-fit: cover; 
+          border-radius: 4px;
+          background: #e0e0e0;
+        }
+        .article-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          min-width: 0;
+        }
+        .title { 
+          font-weight: 500; 
+          color: var(--article-title-color); 
+          line-height: 1.4; 
+          transition: color 0.3s;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .summary {
+          font-size: 0.85em;
+          color: var(--article-summary-color);
+          line-height: 1.4;
+          transition: color 0.3s;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .meta { 
+          font-size: 0.8em; 
+          color: var(--article-meta-color); 
+          transition: color 0.3s; 
+        }
       </style>
       <ha-card id="card-container">
         <div class="header">
@@ -254,14 +307,30 @@ class RabbitRSSCard extends HTMLElement {
     }
   }
 
+  _stripHtml(html) {
+    const tmp = document.createElement("DIV");
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || "";
+  }
+
   _render(articles) {
     if (!this.content) return;
-    this.content.innerHTML = articles.map(item => `
-      <div class="article" onclick="window.open('${item.link}', '_blank')">
-        <span class="title">${item.title}</span>
-        <span class="meta">${new Date(item.pubDate).toLocaleDateString()} • ${item.source}</span>
-      </div>
-    `).join('');
+    this.content.innerHTML = articles.map(item => {
+      const thumbnail = item.thumbnail || item.enclosure?.link || '';
+      const description = this._stripHtml(item.description || item.content || '');
+      const summary = description.substring(0, 150) + (description.length > 150 ? '...' : '');
+      
+      return `
+        <div class="article" onclick="window.open('${item.link}', '_blank')">
+          ${thumbnail ? `<img class="article-thumbnail" src="${thumbnail}" alt="" loading="lazy">` : ''}
+          <div class="article-content">
+            <span class="title">${item.title}</span>
+            ${summary ? `<span class="summary">${summary}</span>` : ''}
+            <span class="meta">${new Date(item.pubDate).toLocaleDateString()} • ${item.source}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 }
 
