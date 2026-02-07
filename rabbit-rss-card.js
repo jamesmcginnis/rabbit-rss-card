@@ -158,10 +158,11 @@ class RabbitRSSCard extends HTMLElement {
 
     if (this.content) {
       this._applyStyles();
-      if (oldFeeds !== JSON.stringify(config.feeds)) {
-        this._fetchRSS();
-      } else if (oldMax !== config.max_articles && this._cachedArticles) {
-        this._render(this._cachedArticles);
+      // If only max_articles changed, re-render immediately using cache
+      if (oldFeeds === JSON.stringify(config.feeds) && oldMax !== config.max_articles && this._cachedArticles) {
+          this._render(this._cachedArticles);
+      } else if (oldFeeds !== JSON.stringify(config.feeds)) {
+          this._fetchRSS();
       }
     }
   }
@@ -199,7 +200,6 @@ class RabbitRSSCard extends HTMLElement {
     this.headerTitle = this.querySelector("#header-title");
     this.refreshIcon = this.querySelector("#refresh-icon");
 
-    // Robust click binding
     this.refreshIcon.addEventListener('click', (e) => {
       e.stopPropagation();
       this._fetchRSS();
@@ -226,7 +226,8 @@ class RabbitRSSCard extends HTMLElement {
     if (this.refreshIcon) this.refreshIcon.classList.add('spinning');
     
     try {
-      const promises = feeds.map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&t=${Date.now()}`).then(res => res.json()));
+      // Added &count=100 to the API call to ensure we retrieve more than the default 20 items
+      const promises = feeds.map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&count=100&t=${Date.now()}`).then(res => res.json()));
       const results = await Promise.all(promises);
       let allItems = [];
       results.forEach(data => {
