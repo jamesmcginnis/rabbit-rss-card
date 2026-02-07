@@ -158,7 +158,6 @@ class RabbitRSSCard extends HTMLElement {
 
     if (this.content) {
       this._applyStyles();
-      // If only max_articles changed, re-render immediately using cache
       if (oldFeeds === JSON.stringify(config.feeds) && oldMax !== config.max_articles && this._cachedArticles) {
           this._render(this._cachedArticles);
       } else if (oldFeeds !== JSON.stringify(config.feeds)) {
@@ -224,17 +223,40 @@ class RabbitRSSCard extends HTMLElement {
   async _fetchRSS() {
     const feeds = this._config.feeds || [];
     if (this.refreshIcon) this.refreshIcon.classList.add('spinning');
+    const max = parseInt(this._config.max_articles) || 20;
     
     try {
-      // Added &count=100 to the API call to ensure we retrieve more than the default 20 items
-      const promises = feeds.map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&count=100&t=${Date.now()}`).then(res => res.json()));
+      // Switched to a more robust proxy that honors higher item counts
+      const promises = feeds.map(url => fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`).then(res => res.json()));
       const results = await Promise.all(promises);
+      
       let allItems = [];
+      const parser = new DOMParser();
+
       results.forEach(data => {
-        if (data.status === 'ok') {
-          allItems = [...allItems, ...data.items.map(item => ({ ...item, source: data.feed.title }))];
-        }
+        const xml = parser.parseFromString(data.contents, "text/xml");
+        const sourceTitle = xml.querySelector("title") ? xml.querySelector("title").textContent : "RSS";
+        const entries = Array.from(xml.querySelectorAll("item, entry"));
+
+        entries.forEach(item => {
+          const title = item.querySelector("title")?.textContent || "No Title";
+          const link = item.querySelector("link")?.textContent || item.querySelector("link")?.getAttribute("href") || "";
+          const pubDate = item.querySelector("pubDate, published, updated")?.textContent || "";
+          const description = item.querySelector("description, summary, content")?.textContent || "";
+          
+          // Improved thumbnail detection
+          let thumbnail = "";
+          const media = item.getElementsByTagName("media:content")[0] || item.getElementsByTagName("enclosure")[0];
+          if (media) thumbnail = media.getAttribute("url");
+          if (!thumbnail) {
+             const imgMatch = description.match(/<img[^>]+src="([^">]+)"/);
+             if (imgMatch) thumbnail = imgMatch[1];
+          }
+
+          allItems.push({ title, link, pubDate, description, thumbnail, source: sourceTitle });
+        });
       });
+
       allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
       this._cachedArticles = allItems;
       this._render(allItems);
@@ -257,17 +279,16 @@ class RabbitRSSCard extends HTMLElement {
     const displayItems = articles.slice(0, max);
     
     this.content.innerHTML = displayItems.map(item => {
-      const thumbnail = item.thumbnail || item.enclosure?.link || '';
-      const description = this._stripHtml(item.description || item.content || '');
+      const description = this._stripHtml(item.description);
       const summary = description.substring(0, 150) + (description.length > 150 ? '...' : '');
       
       return `
         <div class="article" onclick="window.open('${item.link}', '_blank')">
-          ${thumbnail ? `<img class="article-thumbnail" src="${thumbnail}">` : ''}
+          ${item.thumbnail ? `<img class="article-thumbnail" src="${item.thumbnail}">` : ''}
           <div class="article-content">
             <span class="title">${item.title}</span>
             <span class="summary">${summary}</span>
-            <span class="meta">${new Date(item.pubDate).toLocaleDateString()} • ${item.source}</span>
+            <span class="meta">${item.pubDate ? new Date(item.pubDate).toLocaleDateString() : ''} • ${item.source}</span>
           </div>
         </div>
       `;
