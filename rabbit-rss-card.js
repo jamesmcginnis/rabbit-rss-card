@@ -81,16 +81,6 @@ class RabbitRSSEditor extends HTMLElement {
           <div class="help-text">Feeds will automatically refresh at this interval (1-1440 minutes)</div>
         </div>
 
-        <div>
-          <label class="config-label">Maximum Articles</label>
-          <div class="interval-row">
-            <input type="number" class="number-input" id="max-articles-input" 
-                   value="${this._config.max_articles || 20}" min="1" max="100">
-            <span>articles</span>
-          </div>
-          <div class="help-text">Maximum number of articles to display (1-100)</div>
-        </div>
-
         <div class="section-title">Colors</div>
         <div class="color-grid">
           <div class="color-row">
@@ -137,11 +127,6 @@ class RabbitRSSEditor extends HTMLElement {
       const value = Math.max(1, Math.min(1440, parseInt(e.target.value) || 30));
       e.target.value = value;
       this._updateConfig({ refresh_interval: value });
-    });
-    this.querySelector('#max-articles-input').addEventListener('change', (e) => {
-      const value = Math.max(1, Math.min(100, parseInt(e.target.value) || 20));
-      e.target.value = value;
-      this._updateConfig({ max_articles: value });
     });
     this.querySelector('#header-color-picker').addEventListener('change', (e) => this._updateConfig({ header_color: e.target.value }));
     this.querySelector('#header-text-picker').addEventListener('change', (e) => this._updateConfig({ header_text_color: e.target.value }));
