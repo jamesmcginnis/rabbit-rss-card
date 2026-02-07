@@ -17,6 +17,7 @@ A sleek, multi-feed RSS reader for Home Assistant with thumbnails, summaries, an
 - **Multi-Feed Support**: Aggregate news from multiple sources into a single, unified list
 - **Visual Editor**: No YAML required! Add feeds and customize colors directly in the Home Assistant UI
 - **Full Customization**: Change background colors, header colors, text styles, and summary text color to match your dashboard theme
+- **Auto-Refresh**: Feeds automatically refresh at configurable intervals (default: 30 minutes)
 - **Auto-Sorting**: Articles are automatically sorted by date, regardless of which feed they come from
 - **Responsive Design**: Optimized for both desktop and mobile viewports with flexible layouts
 - **Clean Interface**: Scrollable article list with a maximum height of 450px keeps your dashboard organized
@@ -56,6 +57,7 @@ The Rabbit RSS Card is designed to be configured through the UI:
    - Add RSS feed URLs
    - Customize colors and appearance
    - Set your card title
+   - Configure refresh interval (1-1440 minutes)
 
 ### YAML Configuration (Optional)
 If you prefer manual YAML configuration, you can use the following structure:
@@ -63,6 +65,8 @@ If you prefer manual YAML configuration, you can use the following structure:
 ```yaml
 type: custom:rabbit-rss-card
 title: "Tech News"
+refresh_interval: 30
+max_articles: 20
 header_color: "#2c3e50"
 header_text_color: "#ecf0f1"
 bg_color: "#ffffff"
@@ -79,6 +83,8 @@ feeds:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `title` | string | "Rabbit RSS" | Card header title |
+| `refresh_interval` | number | 30 | Auto-refresh interval in minutes (1-1440) |
+| `max_articles` | number | 20 | Maximum number of articles to display (1-100) |
 | `header_color` | string | "#03a9f4" | Background color for the card header |
 | `header_text_color` | string | "#ffffff" | Text color for the card header |
 | `bg_color` | string | "#ffffff" | Background color for the card body |
@@ -86,6 +92,8 @@ feeds:
 | `meta_text_color` | string | "#666666" | Color for article metadata (date & source) |
 | `summary_text_color` | string | "#555555" | Color for article summaries |
 | `feeds` | list | - | Array of RSS feed URLs |
+
+**Note**: The `max_articles` option can only be configured via YAML. It is not available in the visual editor.
 
 ## How It Works
 
@@ -95,7 +103,7 @@ The card fetches RSS feeds using the RSS2JSON API, which converts RSS/Atom feeds
 - **Summary** (first 150 characters of description, limited to 2 lines)
 - **Metadata** (publication date and source feed name)
 
-Articles are automatically sorted by publication date with the newest items appearing first.
+Articles are automatically sorted by publication date with the newest items appearing first. The card will automatically refresh feeds at the configured interval.
 
 ## RSS Feed Compatibility
 
@@ -121,6 +129,11 @@ If a feed doesn't provide images, articles will display without thumbnails.
 - Clear your browser cache after making changes
 - Ensure color values are valid hex codes (e.g., `#ffffff`)
 - Check that the card has fully loaded before expecting style changes
+
+### Auto-refresh not working
+- Verify the `refresh_interval` is set to a value between 1 and 1440 minutes
+- Check browser console for any errors
+- The interval timer is reset when the card configuration changes
 
 ## Credits
 
