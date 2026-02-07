@@ -81,6 +81,16 @@ class RabbitRSSEditor extends HTMLElement {
           <div class="help-text">Feeds will automatically refresh at this interval (1-1440 minutes)</div>
         </div>
 
+        <div>
+          <label class="config-label">Maximum Articles</label>
+          <div class="interval-row">
+            <input type="number" class="number-input" id="max-articles-input" 
+                   value="${this._config.max_articles || 20}" min="1" max="100">
+            <span>articles</span>
+          </div>
+          <div class="help-text">Maximum number of articles to display (1-100)</div>
+        </div>
+
         <div class="section-title">Colors</div>
         <div class="color-grid">
           <div class="color-row">
@@ -128,7 +138,11 @@ class RabbitRSSEditor extends HTMLElement {
       e.target.value = value;
       this._updateConfig({ refresh_interval: value });
     });
-    
+    this.querySelector('#max-articles-input').addEventListener('change', (e) => {
+      const value = Math.max(1, Math.min(100, parseInt(e.target.value) || 20));
+      e.target.value = value;
+      this._updateConfig({ max_articles: value });
+    });
     this.querySelector('#header-color-picker').addEventListener('change', (e) => this._updateConfig({ header_color: e.target.value }));
     this.querySelector('#header-text-picker').addEventListener('change', (e) => this._updateConfig({ header_text_color: e.target.value }));
     this.querySelector('#bg-color-picker').addEventListener('change', (e) => this._updateConfig({ bg_color: e.target.value }));
@@ -207,10 +221,12 @@ class RabbitRSSCard extends HTMLElement {
       this._fetchRSS();
     }
 
+    // Update auto-refresh interval if changed
     if (oldInterval !== config.refresh_interval) {
       this._setupAutoRefresh();
     }
 
+    // Re-render if max articles changed
     if (oldMaxArticles !== config.max_articles && this._cachedArticles) {
       this._render(this._cachedArticles);
     }
@@ -242,9 +258,8 @@ class RabbitRSSCard extends HTMLElement {
       <style>
         ha-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; transition: all 0.3s ease; }
         .header { padding: 16px; font-weight: bold; font-size: 1.1em; display: flex; justify-content: space-between; align-items: center; }
-        .refresh-btn { cursor: pointer; }
-        .refresh-btn.spinning { animation: spin 1s linear infinite; }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .refresh-btn { cursor: pointer; transition: transform 0.2s; }
+        .refresh-btn:active { transform: rotate(180deg); }
         .article-list { max-height: 450px; overflow-y: auto; }
         .article { 
           padding: 12px 16px; 
@@ -307,9 +322,8 @@ class RabbitRSSCard extends HTMLElement {
     this.content = this.querySelector("#content");
     this.container = this.querySelector("#card-container");
     this.headerTitle = this.querySelector("#header-title");
-    this.refreshIcon = this.querySelector("#refresh-icon");
     
-    this.refreshIcon.onclick = () => this._fetchRSS();
+    this.querySelector("#refresh-icon").onclick = () => this._fetchRSS();
     
     this._applyStyles();
     this._fetchRSS();
@@ -317,9 +331,12 @@ class RabbitRSSCard extends HTMLElement {
   }
 
   _setupAutoRefresh() {
+    // Clear existing interval if any
     if (this._refreshInterval) {
       clearInterval(this._refreshInterval);
     }
+
+    // Set up new interval (convert minutes to milliseconds)
     const intervalMinutes = this._config.refresh_interval || 30;
     const intervalMs = intervalMinutes * 60 * 1000;
     
@@ -329,6 +346,7 @@ class RabbitRSSCard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    // Clean up interval when card is removed
     if (this._refreshInterval) {
       clearInterval(this._refreshInterval);
     }
@@ -337,13 +355,11 @@ class RabbitRSSCard extends HTMLElement {
   async _fetchRSS() {
     const feeds = (this._config && this._config.feeds) || [];
     const validFeeds = feeds.filter(url => url && url.trim().startsWith("http"));
-    
     if (validFeeds.length === 0) {
       if (this.content) this.content.innerHTML = `<div style="padding:20px;">No valid feeds.</div>`;
       return;
     }
     
-    if (this.refreshIcon) this.refreshIcon.classList.add('spinning');
     if (this.content) this.content.style.opacity = "0.5";
 
     try {
@@ -357,13 +373,13 @@ class RabbitRSSCard extends HTMLElement {
       });
       allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
       
+      // Cache all articles for potential re-rendering with different max_articles
       this._cachedArticles = allItems;
       this._render(allItems);
     } catch (e) {
       if(this.content) this.content.innerHTML = `<div style="padding:20px;">Error loading feeds.</div>`;
     } finally {
       if (this.content) this.content.style.opacity = "1";
-      if (this.refreshIcon) this.refreshIcon.classList.remove('spinning');
     }
   }
 
@@ -376,6 +392,7 @@ class RabbitRSSCard extends HTMLElement {
   _render(articles) {
     if (!this.content) return;
     
+    // Limit articles based on max_articles config
     const maxArticles = this._config.max_articles || 20;
     const displayArticles = articles.slice(0, maxArticles);
     
