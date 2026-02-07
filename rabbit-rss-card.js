@@ -1,5 +1,5 @@
 /**
- * Rabbit RSS Card (Fixed)
+ * Rabbit RSS Card
  * GitHub: https://github.com/jamesmcginnis/rabbit-rss-card
  */
 
@@ -17,26 +17,31 @@ window.customCards.push({
 class RabbitRSSEditor extends HTMLElement {
   constructor() {
     super();
-    this._config = {};
+    this._config = { 
+      title: "Rabbit RSS", 
+      feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"],
+      refresh_interval: 30,
+      max_articles: 20,
+      header_color: "#03a9f4",
+      header_text_color: "#ffffff",
+      bg_color: "#ffffff",
+      title_text_color: "#000000",
+      meta_text_color: "#666666",
+      summary_text_color: "#555555"
+    };
   }
 
   setConfig(config) {
-    this._config = config;
-    this._render();
+    this._config = { ...this._config, ...config };
   }
 
   set hass(hass) {
     this._hass = hass;
+    this._render();
   }
 
   _render() {
-    if (!this._config) return;
-
-    // Use a flag to avoid re-rendering the whole HTML structure if it exists
-    if (this._rendered) {
-      this.querySelector('#max-articles-input').value = this._config.max_articles || 20;
-      return;
-    }
+    if (!this._config || this._rendered) return;
 
     this.innerHTML = `
       <style>
@@ -58,7 +63,6 @@ class RabbitRSSEditor extends HTMLElement {
           <label class="config-label">Card Title</label>
           <input type="text" class="input-box" id="title-input" value="${this._config.title || ''}">
         </div>
-
         <div>
           <label class="config-label">Maximum Articles</label>
           <div class="interval-row">
@@ -66,13 +70,6 @@ class RabbitRSSEditor extends HTMLElement {
             <span>articles</span>
           </div>
         </div>
-
-        <div class="section-title">Colors</div>
-        <div class="color-grid">
-           <div class="color-row"><input type="color" class="color-picker" id="header-color-picker" value="${this._config.header_color || '#03a9f4'}"><label>Header Bg</label></div>
-           <div class="color-row"><input type="color" class="color-picker" id="bg-color-picker" value="${this._config.bg_color || '#ffffff'}"><label>Card Bg</label></div>
-        </div>
-
         <div class="section-title">RSS Feeds</div>
         <div id="feeds-container">
           ${(this._config.feeds || []).map((url, idx) => `
@@ -88,11 +85,8 @@ class RabbitRSSEditor extends HTMLElement {
 
     this.querySelector('#title-input').addEventListener('change', (e) => this._updateConfig({ title: e.target.value }));
     this.querySelector('#max-articles-input').addEventListener('change', (e) => {
-      this._updateConfig({ max_articles: parseInt(e.target.value) });
+      this._updateConfig({ max_articles: parseInt(e.target.value) || 20 });
     });
-    
-    this.querySelector('#header-color-picker').addEventListener('change', (e) => this._updateConfig({ header_color: e.target.value }));
-    this.querySelector('#bg-color-picker').addEventListener('change', (e) => this._updateConfig({ bg_color: e.target.value }));
 
     this.querySelectorAll('.feed-input').forEach(input => {
       input.addEventListener('change', (e) => {
@@ -144,12 +138,10 @@ class RabbitRSSCard extends HTMLElement {
   setConfig(config) {
     const oldMax = this._config?.max_articles;
     const oldFeeds = JSON.stringify(this._config?.feeds);
-    
     this._config = config || {};
 
     if (this.content) {
       this._applyStyles();
-      // If feeds changed, fetch new data. If only max_articles changed, re-render existing data.
       if (oldFeeds !== JSON.stringify(config.feeds)) {
         this._fetchRSS();
       } else if (oldMax !== config.max_articles && this._cachedArticles) {
@@ -167,12 +159,15 @@ class RabbitRSSCard extends HTMLElement {
     this.innerHTML = `
       <style>
         ha-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
-        .header { padding: 16px; font-weight: bold; font-size: 1.1em; display: flex; justify-content: space-between; }
-        .article-list { max-height: 450px; overflow-y: auto; }
-        .article { padding: 12px 16px; border-bottom: 1px solid var(--divider-color); cursor: pointer; display: flex; gap: 12px; text-decoration: none; }
+        .header { padding: 16px; font-weight: bold; font-size: 1.1em; display: flex; justify-content: space-between; align-items: center; }
+        .article-list { max-height: 450px; overflow-y: auto; transition: opacity 0.3s; }
+        .article { padding: 12px 16px; border-bottom: 1px solid var(--divider-color); cursor: pointer; display: flex; gap: 12px; }
         .article-thumbnail { width: 100px; height: 60px; flex-shrink: 0; object-fit: cover; border-radius: 4px; background: #eee; }
-        .article-content { flex: 1; min-width: 0; }
-        .title { font-weight: 500; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: var(--article-title-color); }
+        .title { font-weight: 500; color: var(--article-title-color); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        
+        /* Spinning Animation */
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .spinning { animation: spin 1s linear infinite; pointer-events: none; }
       </style>
       <ha-card id="card-container">
         <div class="header" id="card-header">
@@ -185,7 +180,9 @@ class RabbitRSSCard extends HTMLElement {
     this.content = this.querySelector("#content");
     this.container = this.querySelector("#card-container");
     this.headerTitle = this.querySelector("#header-title");
-    this.querySelector("#refresh-icon").onclick = () => this._fetchRSS();
+    this.refreshIcon = this.querySelector("#refresh-icon");
+    
+    this.refreshIcon.onclick = () => this._fetchRSS();
     
     this._applyStyles();
     this._fetchRSS();
@@ -201,8 +198,11 @@ class RabbitRSSCard extends HTMLElement {
 
   async _fetchRSS() {
     const feeds = this._config.feeds || [];
+    if (this.refreshIcon) this.refreshIcon.classList.add('spinning');
+    if (this.content) this.content.style.opacity = "0.5";
+
     try {
-      const promises = feeds.map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`).then(res => res.json()));
+      const promises = feeds.map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&t=${Date.now()}`).then(res => res.json()));
       const results = await Promise.all(promises);
       let allItems = [];
       results.forEach(data => {
@@ -215,11 +215,14 @@ class RabbitRSSCard extends HTMLElement {
       this._render(allItems);
     } catch (e) {
       this.content.innerHTML = "Error loading feeds.";
+    } finally {
+      if (this.refreshIcon) this.refreshIcon.classList.remove('spinning');
+      if (this.content) this.content.style.opacity = "1";
     }
   }
 
   _render(articles) {
-    const max = this._config.max_articles || 20;
+    const max = parseInt(this._config.max_articles) || 20;
     const displayItems = articles.slice(0, max);
     
     this.content.innerHTML = displayItems.map(item => `
@@ -227,7 +230,7 @@ class RabbitRSSCard extends HTMLElement {
         ${item.thumbnail ? `<img class="article-thumbnail" src="${item.thumbnail}">` : ''}
         <div class="article-content">
           <div class="title">${item.title}</div>
-          <div style="font-size:0.8em; color:gray;">${item.source}</div>
+          <div style="font-size:0.8em; color:gray;">${item.source} • ${new Date(item.pubDate).toLocaleDateString()}</div>
         </div>
       </div>
     `).join('');
