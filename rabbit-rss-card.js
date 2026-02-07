@@ -1,178 +1,401 @@
 /**
  * Rabbit RSS Card
+ * GitHub: https://github.com/jamesmcginnis/rabbit-rss-card
  */
 
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "rabbit-rss-card",
   name: "Rabbit RSS Card",
-  description: "A multi-feed RSS reader with fixed loading and article limits.",
+  description: "A multi-feed RSS reader with full color customization.",
   preview: true
 });
 
+/**
+ * 2. THE VISUAL EDITOR
+ */
 class RabbitRSSEditor extends HTMLElement {
-  setConfig(config) {
-    this._config = config;
+  constructor() {
+    super();
+    this._config = { 
+      title: "Rabbit RSS", 
+      feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"],
+      refresh_interval: 30,
+      max_articles: 20,
+      header_color: "#03a9f4",
+      header_text_color: "#ffffff",
+      bg_color: "#ffffff",
+      title_text_color: "#000000",
+      meta_text_color: "#666666",
+      summary_text_color: "#555555"
+    };
   }
+
+  setConfig(config) {
+    this._config = { ...this._config, ...config };
+  }
+
   set hass(hass) {
+    this._hass = hass;
     this._render();
   }
+
   _render() {
     if (!this._config || this._rendered) return;
+
     this.innerHTML = `
       <style>
-        .card-config { padding: 10px; display: flex; flex-direction: column; gap: 12px; font-family: sans-serif; }
-        .config-label { font-weight: bold; font-size: 14px; margin-bottom: 4px; display: block; }
-        .input-box { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .card-config { padding: 10px; font-family: sans-serif; display: flex; flex-direction: column; gap: 12px; }
+        .config-label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px; }
+        .input-box { 
+          width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; 
+          box-sizing: border-box; background: white; color: black;
+        }
+        .number-input {
+          width: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 4px;
+          box-sizing: border-box; background: white; color: black;
+        }
         .color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .color-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-        .color-picker { width: 30px; height: 30px; border: none; cursor: pointer; padding: 0; }
-        .feed-row { display: flex; gap: 8px; margin-bottom: 8px; }
-        .btn { padding: 8px; cursor: pointer; background: #03a9f4; color: white; border: none; border-radius: 4px; }
+        .color-row { display: flex; align-items: center; gap: 10px; }
+        .color-picker { width: 40px; height: 30px; padding: 0; border: none; cursor: pointer; }
+        .feed-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .btn { padding: 8px 12px; cursor: pointer; background: #03a9f4; color: white; border: none; border-radius: 4px; }
+        .btn-delete { background: #f44336; }
+        .section-title { font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 10px; }
+        .interval-row { display: flex; align-items: center; gap: 10px; }
+        .help-text { font-size: 12px; color: #666; margin-top: 5px; }
       </style>
       <div class="card-config">
-        <label class="config-label">Card Title</label>
-        <input type="text" class="input-box" id="title-input" value="${this._config.title || ''}">
-        
-        <label class="config-label">Maximum Articles</label>
-        <input type="number" class="input-box" id="max-articles-input" value="${this._config.max_articles || 20}">
-
-        <div class="color-grid">
-          <div class="color-row"><input type="color" class="color-picker" id="header-bg" value="${this._config.header_color || '#03a9f4'}"> Header</div>
-          <div class="color-row"><input type="color" class="color-picker" id="card-bg" value="${this._config.bg_color || '#ffffff'}"> Card</div>
-          <div class="color-row"><input type="color" class="color-picker" id="title-color" value="${this._config.title_text_color || '#000000'}"> Article Title</div>
+        <div>
+          <label class="config-label">Card Title</label>
+          <input type="text" class="input-box" id="title-input" value="${this._config.title || ''}">
         </div>
 
-        <label class="config-label">Feeds</label>
+        <div>
+          <label class="config-label">Refresh Interval (minutes)</label>
+          <div class="interval-row">
+            <input type="number" class="number-input" id="refresh-interval-input" 
+                   value="${this._config.refresh_interval || 30}" min="1" max="1440">
+            <span>minutes</span>
+          </div>
+          <div class="help-text">Feeds will automatically refresh at this interval (1-1440 minutes)</div>
+        </div>
+
+        <div class="section-title">Colors</div>
+        <div class="color-grid">
+          <div class="color-row">
+            <input type="color" class="color-picker" id="header-color-picker" value="${this._config.header_color || '#03a9f4'}">
+            <label>Header Bg</label>
+          </div>
+          <div class="color-row">
+            <input type="color" class="color-picker" id="header-text-picker" value="${this._config.header_text_color || '#ffffff'}">
+            <label>Header Text</label>
+          </div>
+          <div class="color-row">
+            <input type="color" class="color-picker" id="bg-color-picker" value="${this._config.bg_color || '#ffffff'}">
+            <label>Card Bg</label>
+          </div>
+          <div class="color-row">
+            <input type="color" class="color-picker" id="title-text-picker" value="${this._config.title_text_color || '#000000'}">
+            <label>Article Title</label>
+          </div>
+          <div class="color-row">
+            <input type="color" class="color-picker" id="meta-text-picker" value="${this._config.meta_text_color || '#666666'}">
+            <label>Meta Text</label>
+          </div>
+          <div class="color-row">
+            <input type="color" class="color-picker" id="summary-text-picker" value="${this._config.summary_text_color || '#555555'}">
+            <label>Summary Text</label>
+          </div>
+        </div>
+
+        <div class="section-title">RSS Feeds</div>
         <div id="feeds-container">
           ${(this._config.feeds || []).map((url, idx) => `
             <div class="feed-row">
-              <input type="text" class="input-box feed-input" data-index="${idx}" value="${url}">
-              <button class="btn remove-feed" data-index="${idx}">✕</button>
+              <input type="text" class="input-box feed-input" data-index="${idx}" value="${url}" style="margin-bottom:0;">
+              <button class="btn btn-delete remove-feed" data-index="${idx}">✕</button>
             </div>
           `).join('')}
         </div>
-        <button class="btn" id="add-feed">+ Add Feed</button>
+        <button class="btn" id="add-feed">+ Add Feed URL</button>
       </div>
     `;
 
     this.querySelector('#title-input').addEventListener('change', (e) => this._updateConfig({ title: e.target.value }));
-    this.querySelector('#max-articles-input').addEventListener('change', (e) => this._updateConfig({ max_articles: parseInt(e.target.value) || 20 }));
-    this.querySelector('#header-bg').addEventListener('change', (e) => this._updateConfig({ header_color: e.target.value }));
-    this.querySelector('#card-bg').addEventListener('change', (e) => this._updateConfig({ bg_color: e.target.value }));
-    this.querySelector('#title-color').addEventListener('change', (e) => this._updateConfig({ title_text_color: e.target.value }));
+    this.querySelector('#refresh-interval-input').addEventListener('change', (e) => {
+      const value = Math.max(1, Math.min(1440, parseInt(e.target.value) || 30));
+      e.target.value = value;
+      this._updateConfig({ refresh_interval: value });
+    });
     
-    this.querySelectorAll('.feed-input').forEach(i => i.addEventListener('change', (e) => {
-      const f = [...this._config.feeds]; f[e.target.dataset.index] = e.target.value;
-      this._updateConfig({ feeds: f });
-    }));
+    this.querySelector('#header-color-picker').addEventListener('change', (e) => this._updateConfig({ header_color: e.target.value }));
+    this.querySelector('#header-text-picker').addEventListener('change', (e) => this._updateConfig({ header_text_color: e.target.value }));
+    this.querySelector('#bg-color-picker').addEventListener('change', (e) => this._updateConfig({ bg_color: e.target.value }));
+    this.querySelector('#title-text-picker').addEventListener('change', (e) => this._updateConfig({ title_text_color: e.target.value }));
+    this.querySelector('#meta-text-picker').addEventListener('change', (e) => this._updateConfig({ meta_text_color: e.target.value }));
+    this.querySelector('#summary-text-picker').addEventListener('change', (e) => this._updateConfig({ summary_text_color: e.target.value }));
+
+    this.querySelectorAll('.feed-input').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const newFeeds = [...this._config.feeds];
+        newFeeds[e.target.dataset.index] = e.target.value;
+        this._updateConfig({ feeds: newFeeds });
+      });
+    });
 
     this.querySelector('#add-feed').addEventListener('click', () => {
-      this._rendered = false;
-      this._updateConfig({ feeds: [...(this._config.feeds || []), ""] });
+      const newFeeds = [...(this._config.feeds || []), ""];
+      this._rendered = false; 
+      this._updateConfig({ feeds: newFeeds });
+    });
+
+    this.querySelectorAll('.remove-feed').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const newFeeds = [...this._config.feeds];
+        newFeeds.splice(e.target.dataset.index, 1);
+        this._rendered = false;
+        this._updateConfig({ feeds: newFeeds });
+      });
     });
 
     this._rendered = true;
   }
-  _updateConfig(newVal) {
-    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: { ...this._config, ...newVal } }, bubbles: true, composed: true }));
+
+  _updateConfig(newValues) {
+    const event = new CustomEvent("config-changed", {
+      detail: { config: { ...this._config, ...newValues } },
+      bubbles: true,
+      composed: true,
+    });
+    this.dispatchEvent(event);
   }
 }
 customElements.define("rabbit-rss-editor", RabbitRSSEditor);
 
+/**
+ * 3. THE MAIN CARD LOGIC
+ */
 class RabbitRSSCard extends HTMLElement {
-  static getConfigElement() { return document.createElement("rabbit-rss-editor"); }
+  static getConfigElement() {
+    return document.createElement("rabbit-rss-editor");
+  }
+
+  static getStubConfig() {
+    return { 
+      title: "Rabbit RSS",
+      feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"],
+      refresh_interval: 30,
+      max_articles: 20,
+      header_color: "#03a9f4",
+      header_text_color: "#ffffff",
+      bg_color: "#ffffff",
+      title_text_color: "#000000",
+      meta_text_color: "#666666",
+      summary_text_color: "#555555"
+    };
+  }
 
   setConfig(config) {
-    this._config = config;
-    if (this.container) this._applyStyles();
+    const oldFeeds = JSON.stringify(this._config?.feeds);
+    const oldInterval = this._config?.refresh_interval;
+    const oldMaxArticles = this._config?.max_articles;
+    this._config = config || {};
+    this._applyStyles();
+
+    if (oldFeeds !== JSON.stringify(config.feeds) && this.content) {
+      this._fetchRSS();
+    }
+
+    if (oldInterval !== config.refresh_interval) {
+      this._setupAutoRefresh();
+    }
+
+    if (oldMaxArticles !== config.max_articles && this._cachedArticles) {
+      this._render(this._cachedArticles);
+    }
+  }
+
+  _applyStyles() {
+    if (!this.container) return;
+    this.headerTitle.innerText = this._config.title || "Rabbit RSS";
+    
+    const header = this.querySelector(".header");
+    header.style.backgroundColor = this._config.header_color || "#03a9f4";
+    header.style.color = this._config.header_text_color || "#ffffff";
+    
+    this.container.style.backgroundColor = this._config.bg_color || "#ffffff";
+    this.content.style.backgroundColor = this._config.bg_color || "#ffffff";
+    
+    this.container.style.setProperty('--article-title-color', this._config.title_text_color || "#000000");
+    this.container.style.setProperty('--article-meta-color', this._config.meta_text_color || "#666666");
+    this.container.style.setProperty('--article-summary-color', this._config.summary_text_color || "#555555");
   }
 
   set hass(hass) {
-    if (!this.container) this._init();
+    this._hass = hass;
+    if (!this.content) this._init();
   }
 
   _init() {
     this.innerHTML = `
       <style>
-        ha-card { display: flex; flex-direction: column; overflow: hidden; }
-        .header { padding: 16px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
-        .article-list { max-height: 500px; overflow-y: auto; }
-        .article { padding: 12px; border-bottom: 1px solid #eee; display: flex; gap: 12px; cursor: pointer; text-decoration: none; }
-        .article-thumb { width: 100px; height: 70px; object-fit: cover; border-radius: 4px; flex-shrink: 0; background: #eee; }
-        .article-title { font-weight: 500; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; }
+        ha-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; height: 100%; transition: all 0.3s ease; }
+        .header { padding: 16px; font-weight: bold; font-size: 1.1em; display: flex; justify-content: space-between; align-items: center; }
+        .refresh-btn { cursor: pointer; }
+        .refresh-btn.spinning { animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
-        .spinning { animation: spin 1s linear infinite; }
+        .article-list { max-height: 450px; overflow-y: auto; }
+        .article { 
+          padding: 12px 16px; 
+          border-bottom: 1px solid var(--divider-color); 
+          cursor: pointer; 
+          display: flex; 
+          gap: 12px;
+          text-decoration: none; 
+        }
+        .article:hover { background: rgba(125, 125, 125, 0.1); }
+        .article-thumbnail { 
+          width: 120px; 
+          height: 80px; 
+          flex-shrink: 0;
+          object-fit: cover; 
+          border-radius: 4px;
+          background: #e0e0e0;
+        }
+        .article-content {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          min-width: 0;
+        }
+        .title { 
+          font-weight: 500; 
+          color: var(--article-title-color); 
+          line-height: 1.4; 
+          transition: color 0.3s;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .summary {
+          font-size: 0.85em;
+          color: var(--article-summary-color);
+          line-height: 1.4;
+          transition: color 0.3s;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+        .meta { 
+          font-size: 0.8em; 
+          color: var(--article-meta-color); 
+          transition: color 0.3s; 
+        }
       </style>
       <ha-card id="card-container">
-        <div class="header" id="card-header">
-          <span id="title-text"></span>
-          <ha-icon id="refresh-btn" icon="mdi:refresh" style="cursor:pointer"></ha-icon>
+        <div class="header">
+          <span id="header-title"></span>
+          <ha-icon id="refresh-icon" class="refresh-btn" icon="mdi:refresh"></ha-icon>
         </div>
-        <div id="content" class="article-list">Loading...</div>
+        <div id="content" class="article-list">Loading feeds...</div>
       </ha-card>
     `;
-    this.container = this.querySelector("#card-container");
     this.content = this.querySelector("#content");
-    this.refreshBtn = this.querySelector("#refresh-btn");
+    this.container = this.querySelector("#card-container");
+    this.headerTitle = this.querySelector("#header-title");
+    this.refreshIcon = this.querySelector("#refresh-icon");
     
-    this.refreshBtn.addEventListener('click', () => this._fetchRSS());
-
+    this.refreshIcon.onclick = () => this._fetchRSS();
+    
     this._applyStyles();
     this._fetchRSS();
+    this._setupAutoRefresh();
   }
 
-  _applyStyles() {
-    this.querySelector("#title-text").innerText = this._config.title || "Rabbit RSS";
-    const head = this.querySelector("#card-header");
-    head.style.background = this._config.header_color || "#03a9f4";
-    head.style.color = "#fff";
-    this.container.style.background = this._config.bg_color || "#ffffff";
+  _setupAutoRefresh() {
+    if (this._refreshInterval) {
+      clearInterval(this._refreshInterval);
+    }
+    const intervalMinutes = this._config.refresh_interval || 30;
+    const intervalMs = intervalMinutes * 60 * 1000;
+    
+    this._refreshInterval = setInterval(() => {
+      this._fetchRSS();
+    }, intervalMs);
+  }
+
+  disconnectedCallback() {
+    if (this._refreshInterval) {
+      clearInterval(this._refreshInterval);
+    }
   }
 
   async _fetchRSS() {
-    if (!this._config.feeds || this._config.feeds.length === 0) {
-      this.content.innerHTML = "No feeds configured.";
+    const feeds = (this._config && this._config.feeds) || [];
+    const validFeeds = feeds.filter(url => url && url.trim().startsWith("http"));
+    
+    if (validFeeds.length === 0) {
+      if (this.content) this.content.innerHTML = `<div style="padding:20px;">No valid feeds.</div>`;
       return;
     }
-    this.refreshBtn.classList.add('spinning');
-    let allArticles = [];
+    
+    if (this.refreshIcon) this.refreshIcon.classList.add('spinning');
+    if (this.content) this.content.style.opacity = "0.5";
 
     try {
-      // SEQUENTIAL FETCH: Prevents hitting rate limits by doing feeds one by one
-      for (const url of this._config.feeds) {
-        if (!url) continue;
-        const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&api_key=&t=${Date.now()}`);
-        const data = await response.json();
+      const promises = validFeeds.map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`).then(res => res.json()));
+      const results = await Promise.all(promises);
+      let allItems = [];
+      results.forEach(data => {
         if (data.status === 'ok') {
-          allArticles = [...allArticles, ...data.items.map(item => ({ ...item, source: data.feed.title }))];
+          allItems = [...allItems, ...data.items.map(item => ({ ...item, source: data.feed.title }))];
         }
-      }
-
-      allArticles.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-      this._render(allArticles);
+      });
+      allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+      
+      this._cachedArticles = allItems;
+      this._render(allItems);
     } catch (e) {
-      this.content.innerHTML = "Error loading feeds. Please try refreshing.";
+      if(this.content) this.content.innerHTML = `<div style="padding:20px;">Error loading feeds.</div>`;
     } finally {
-      this.refreshBtn.classList.remove('spinning');
+      if (this.content) this.content.style.opacity = "1";
+      if (this.refreshIcon) this.refreshIcon.classList.remove('spinning');
     }
+  }
+
+  _stripHtml(html) {
+    const tmp = document.createElement("DIV");
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || "";
   }
 
   _render(articles) {
-    const max = parseInt(this._config.max_articles) || 20;
-    const items = articles.slice(0, max);
-
-    if (items.length === 0) {
-      this.content.innerHTML = "No articles found.";
-      return;
-    }
-
-    this.content.innerHTML = items.map(item => `
-      <div class="article" onclick="window.open('${item.link}', '_blank')">
-        ${(item.thumbnail || (item.enclosure && item.enclosure.link)) ? `<img class="article-thumb" src="${item.thumbnail || item.enclosure.link}">` : ''}
-        <div class="article-title" style="color: ${this._config.title_text_color || '#000000'}">${item.title}</div>
-      </div>
-    `).join('');
+    if (!this.content) return;
+    
+    const maxArticles = this._config.max_articles || 20;
+    const displayArticles = articles.slice(0, maxArticles);
+    
+    this.content.innerHTML = displayArticles.map(item => {
+      const thumbnail = item.thumbnail || item.enclosure?.link || '';
+      const description = this._stripHtml(item.description || item.content || '');
+      const summary = description.substring(0, 150) + (description.length > 150 ? '...' : '');
+      
+      return `
+        <div class="article" onclick="window.open('${item.link}', '_blank')">
+          ${thumbnail ? `<img class="article-thumbnail" src="${thumbnail}" alt="" loading="lazy">` : ''}
+          <div class="article-content">
+            <span class="title">${item.title}</span>
+            ${summary ? `<span class="summary">${summary}</span>` : ''}
+            <span class="meta">${new Date(item.pubDate).toLocaleDateString()} • ${item.source}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
   }
 }
+
 customElements.define("rabbit-rss-card", RabbitRSSCard);
