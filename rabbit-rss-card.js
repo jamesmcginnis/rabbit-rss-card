@@ -24,7 +24,6 @@ class RabbitRSSEditor extends HTMLElement {
       max_articles: 20,
       auto_scroll: false,
       scroll_speed: "medium",
-      list_scroll: "scroll",
       article_view: "browser",
       header_color: "#03a9f4",
       header_text_color: "#ffffff",
@@ -71,10 +70,6 @@ class RabbitRSSEditor extends HTMLElement {
     const scrollSpeedSelect = this.querySelector('#scroll-speed-select');
     if (scrollSpeedSelect) scrollSpeedSelect.value = this._config.scroll_speed || 'medium';
 
-    ['scroll','drag'].forEach(v => {
-      const el = this.querySelector(`#ls_${v}`);
-      if (el) el.checked = (this._config.list_scroll || 'scroll') === v;
-    });
 
     this.querySelectorAll('.colour-card').forEach(card => {
       const key = card.dataset.key;
@@ -204,26 +199,15 @@ class RabbitRSSEditor extends HTMLElement {
         <div>
           <div class="section-title">Scrolling</div>
           <div class="card-block" style="padding:12px;">
-            <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Article List Scroll Mode</div>
-            <div class="segmented">
-              <input type="radio" name="list_scroll" id="ls_scroll" value="scroll" ${(this._config.list_scroll||'scroll')==='scroll'?'checked':''}><label for="ls_scroll">Normal Scroll</label>
-              <input type="radio" name="list_scroll" id="ls_drag"   value="drag"   ${(this._config.list_scroll||'scroll')==='drag'  ?'checked':''}><label for="ls_drag">Drag Scroll</label>
-            </div>
-            <div class="hint">
-              <b>Normal Scroll</b> — standard touch/mouse-wheel scroll with scrollbar ·
-              <b>Drag Scroll</b> — click or touch and drag up/down to pan through articles, no scrollbar
-            </div>
-            <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.07);">
-              <div style="display:flex;align-items:center;justify-content:space-between;padding:0;">
-                <div>
-                  <div style="font-size:14px;font-weight:500;">Continuous Auto-Scroll</div>
-                  <div style="font-size:11px;color:#888;margin-top:2px;line-height:1.4;">Articles scroll continuously and loop</div>
-                </div>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="auto-scroll-toggle" ${autoScrollChecked}>
-                  <span class="toggle-track"></span>
-                </label>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:0;">
+              <div>
+                <div style="font-size:14px;font-weight:500;">Continuous Auto-Scroll</div>
+                <div style="font-size:11px;color:#888;margin-top:2px;line-height:1.4;">Articles scroll continuously and loop</div>
               </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="auto-scroll-toggle" ${autoScrollChecked}>
+                <span class="toggle-track"></span>
+              </label>
             </div>
             <div id="scroll-speed-row" class="inline-row" style="${this._config.auto_scroll ? '' : 'display:none'}">
               <span class="inline-row-label">Scroll Speed</span>
@@ -362,10 +346,6 @@ class RabbitRSSEditor extends HTMLElement {
     this.querySelector('#scroll-speed-select').addEventListener('change', (e) =>
       this._updateConfig('scroll_speed', e.target.value));
 
-    ['scroll','drag'].forEach(v => {
-      const el = this.querySelector(`#ls_${v}`);
-      if (el) el.addEventListener('change', () => this._updateConfig('list_scroll', v));
-    });
 
     this.querySelector('#feeds-container').addEventListener('change', (e) => {
       const input = e.target.closest('.feed-url');
@@ -423,7 +403,6 @@ class RabbitRSSCard extends HTMLElement {
       max_articles: 20,
       auto_scroll: false,
       scroll_speed: "medium",
-      list_scroll: "scroll",
       article_view: "browser",
       header_color: "#03a9f4",
       header_text_color: "#ffffff",
@@ -440,7 +419,6 @@ class RabbitRSSCard extends HTMLElement {
     const oldMaxArticles = this._config?.max_articles;
     const oldAutoScroll  = this._config?.auto_scroll;
     const oldScrollSpeed = this._config?.scroll_speed;
-    const oldListScroll  = this._config?.list_scroll;
 
     this._config = config || {};
     this._applyStyles();
@@ -455,7 +433,7 @@ class RabbitRSSCard extends HTMLElement {
       this._render(this._cachedArticles);
     }
     if (
-      (oldAutoScroll !== config.auto_scroll || oldScrollSpeed !== config.scroll_speed || oldListScroll !== config.list_scroll)
+      (oldAutoScroll !== config.auto_scroll || oldScrollSpeed !== config.scroll_speed)
       && this._cachedArticles
     ) {
       this._render(this._cachedArticles);
@@ -493,9 +471,6 @@ class RabbitRSSCard extends HTMLElement {
 
         .article-list { max-height:450px; overflow-y:auto; }
         .article-list.auto-scroll-active { height:450px; max-height:450px; overflow:hidden; position:relative; }
-        .article-list.drag-scroll { overflow-y:scroll; touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none; scrollbar-width:none; }
-        .article-list.drag-scroll::-webkit-scrollbar { display:none; }
-        .article-list.drag-scroll.is-dragging { cursor:grabbing; }
         .scroll-track { will-change:transform; }
 
         .article { padding:12px 16px; border-bottom:1px solid var(--divider-color); display:flex; gap:12px; text-decoration:none; cursor:pointer; }
@@ -652,85 +627,6 @@ class RabbitRSSCard extends HTMLElement {
     }
   }
 
-  // ── Drag-scroll ─────────────────────────────────────────────────────────────
-
-  _setupDragScroll(el) {
-    this._teardownDragScroll(el);
-
-    let startY = 0, startScrollTop = 0, isDragging = false, hasMoved = false;
-    let velY = 0, lastY = 0, lastT = 0, rafId = null;
-    const CLICK_THRESHOLD = 5;
-
-    const onPointerDown = (e) => {
-      isDragging     = true;
-      hasMoved       = false;
-      startY         = e.clientY;
-      startScrollTop = el.scrollTop;
-      lastY          = e.clientY;
-      lastT          = Date.now();
-      velY           = 0;
-      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-      el.setPointerCapture(e.pointerId);
-      el.classList.add('is-dragging');
-    };
-
-    const onPointerMove = (e) => {
-      if (!isDragging) return;
-      const dy  = e.clientY - startY;
-      if (Math.abs(dy) > CLICK_THRESHOLD) hasMoved = true;
-      const now = Date.now();
-      const dt  = now - lastT || 1;
-      velY       = (e.clientY - lastY) / dt;
-      lastY      = e.clientY;
-      lastT      = now;
-      el.scrollTop = startScrollTop - dy;
-    };
-
-    const onPointerUp = () => {
-      if (!isDragging) return;
-      isDragging = false;
-      el.classList.remove('is-dragging');
-      if (!hasMoved) return;
-      const DECEL = 0.92, MIN_VEL = 0.05;
-      const step = () => {
-        velY *= DECEL;
-        if (Math.abs(velY) < MIN_VEL) return;
-        el.scrollTop -= velY * 16;
-        rafId = requestAnimationFrame(step);
-      };
-      rafId = requestAnimationFrame(step);
-    };
-
-    const onClickSuppress = (e) => {
-      if (hasMoved) e.stopImmediatePropagation();
-    };
-
-    el.addEventListener('pointerdown', onPointerDown);
-    el.addEventListener('pointermove', onPointerMove);
-    el.addEventListener('pointerup',   onPointerUp);
-    el.addEventListener('pointercancel', onPointerUp);
-    el.addEventListener('click', onClickSuppress, true);
-
-    el._dragHandlers  = { onPointerDown, onPointerMove, onPointerUp, onClickSuppress };
-    el._dragRafRef    = () => { if (rafId) cancelAnimationFrame(rafId); };
-  }
-
-  _teardownDragScroll(el) {
-    if (!el._dragHandlers) return;
-    const { onPointerDown, onPointerMove, onPointerUp, onClickSuppress } = el._dragHandlers;
-    el.removeEventListener('pointerdown',  onPointerDown);
-    el.removeEventListener('pointermove',  onPointerMove);
-    el.removeEventListener('pointerup',    onPointerUp);
-    el.removeEventListener('pointercancel', onPointerUp);
-    el.removeEventListener('click', onClickSuppress, true);
-    if (el._dragDocHandlers) {
-      document.removeEventListener('mousemove', el._dragDocHandlers.onMouseMove);
-      document.removeEventListener('mouseup',   el._dragDocHandlers.onMouseUp);
-      delete el._dragDocHandlers;
-    }
-    if (el._dragRafRef) { el._dragRafRef(); delete el._dragRafRef; }
-    delete el._dragHandlers;
-  }
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────
 
@@ -830,16 +726,6 @@ class RabbitRSSCard extends HTMLElement {
     } else {
       this.content.classList.remove("auto-scroll-active");
       this.content.innerHTML = articleHTML;
-    }
-
-    // Apply drag-scroll mode
-    const listScroll = this._config.list_scroll || 'scroll';
-    if (!this._config.auto_scroll && listScroll === 'drag') {
-      this.content.classList.add('drag-scroll');
-      this._setupDragScroll(this.content);
-    } else {
-      this.content.classList.remove('drag-scroll');
-      this._teardownDragScroll(this.content);
     }
 
     // Wire panel-mode click handlers
