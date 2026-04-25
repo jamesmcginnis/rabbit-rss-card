@@ -22,6 +22,8 @@ class RabbitRSSEditor extends HTMLElement {
       feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"],
       refresh_interval: 30,
       max_articles: 20,
+      auto_scroll: false,
+      scroll_speed: "medium",
       header_color: "#03a9f4",
       header_text_color: "#ffffff",
       bg_color: "#ffffff",
@@ -43,6 +45,9 @@ class RabbitRSSEditor extends HTMLElement {
   _render() {
     if (!this._config || this._rendered) return;
 
+    const autoScrollChecked = this._config.auto_scroll ? "checked" : "";
+    const scrollSpeedValue = this._config.scroll_speed || "medium";
+
     this.innerHTML = `
       <style>
         .card-config { padding: 10px; font-family: sans-serif; display: flex; flex-direction: column; gap: 12px; }
@@ -55,6 +60,10 @@ class RabbitRSSEditor extends HTMLElement {
           width: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 4px;
           box-sizing: border-box; background: white; color: black;
         }
+        .select-input {
+          padding: 10px; border: 1px solid #ccc; border-radius: 4px;
+          box-sizing: border-box; background: white; color: black;
+        }
         .color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .color-row { display: flex; align-items: center; gap: 10px; }
         .color-picker { width: 40px; height: 30px; padding: 0; border: none; cursor: pointer; }
@@ -64,6 +73,24 @@ class RabbitRSSEditor extends HTMLElement {
         .section-title { font-weight: bold; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 10px; }
         .interval-row { display: flex; align-items: center; gap: 10px; }
         .help-text { font-size: 12px; color: #666; margin-top: 5px; }
+        .toggle-row { display: flex; align-items: center; gap: 12px; }
+        .toggle-switch {
+          position: relative; display: inline-block; width: 46px; height: 24px; flex-shrink: 0;
+        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+          position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+          background-color: #ccc; border-radius: 24px; transition: 0.3s;
+        }
+        .toggle-slider:before {
+          position: absolute; content: ""; height: 18px; width: 18px;
+          left: 3px; bottom: 3px; background-color: white;
+          border-radius: 50%; transition: 0.3s;
+        }
+        .toggle-switch input:checked + .toggle-slider { background-color: #03a9f4; }
+        .toggle-switch input:checked + .toggle-slider:before { transform: translateX(22px); }
+        .scroll-options { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(3,169,244,0.08); border-radius: 6px; border-left: 3px solid #03a9f4; }
+        .scroll-options[hidden] { display: none; }
       </style>
       <div class="card-config">
         <div>
@@ -79,6 +106,28 @@ class RabbitRSSEditor extends HTMLElement {
             <span>minutes</span>
           </div>
           <div class="help-text">Feeds will automatically refresh at this interval (1-1440 minutes)</div>
+        </div>
+
+        <div class="section-title">Scrolling</div>
+        <div>
+          <div class="toggle-row">
+            <label class="toggle-switch">
+              <input type="checkbox" id="auto-scroll-toggle" ${autoScrollChecked}>
+              <span class="toggle-slider"></span>
+            </label>
+            <label class="config-label" style="margin:0; cursor:pointer;" for="auto-scroll-toggle">
+              Continuous Auto-Scroll
+            </label>
+          </div>
+          <div class="help-text">Articles scroll continuously and loop back to the beginning.</div>
+        </div>
+        <div class="scroll-options" id="scroll-speed-row" ${this._config.auto_scroll ? '' : 'hidden'}>
+          <label class="config-label" style="margin:0; white-space:nowrap;">Scroll Speed</label>
+          <select class="select-input" id="scroll-speed-select">
+            <option value="slow"   ${scrollSpeedValue === 'slow'   ? 'selected' : ''}>🐢 Slow</option>
+            <option value="medium" ${scrollSpeedValue === 'medium' ? 'selected' : ''}>🐇 Medium</option>
+            <option value="fast"   ${scrollSpeedValue === 'fast'   ? 'selected' : ''}>⚡ Fast</option>
+          </select>
         </div>
 
         <div class="section-title">Colors</div>
@@ -122,12 +171,26 @@ class RabbitRSSEditor extends HTMLElement {
       </div>
     `;
 
+    // --- Wire up events ---
     this.querySelector('#title-input').addEventListener('change', (e) => this._updateConfig({ title: e.target.value }));
     this.querySelector('#refresh-interval-input').addEventListener('change', (e) => {
       const value = Math.max(1, Math.min(1440, parseInt(e.target.value) || 30));
       e.target.value = value;
       this._updateConfig({ refresh_interval: value });
     });
+
+    // Auto-scroll toggle: show/hide speed row live without re-rendering
+    const autoScrollToggle = this.querySelector('#auto-scroll-toggle');
+    const scrollSpeedRow = this.querySelector('#scroll-speed-row');
+    autoScrollToggle.addEventListener('change', (e) => {
+      scrollSpeedRow.hidden = !e.target.checked;
+      this._updateConfig({ auto_scroll: e.target.checked });
+    });
+
+    this.querySelector('#scroll-speed-select').addEventListener('change', (e) => {
+      this._updateConfig({ scroll_speed: e.target.value });
+    });
+
     this.querySelector('#header-color-picker').addEventListener('change', (e) => this._updateConfig({ header_color: e.target.value }));
     this.querySelector('#header-text-picker').addEventListener('change', (e) => this._updateConfig({ header_text_color: e.target.value }));
     this.querySelector('#bg-color-picker').addEventListener('change', (e) => this._updateConfig({ bg_color: e.target.value }));
@@ -162,8 +225,9 @@ class RabbitRSSEditor extends HTMLElement {
   }
 
   _updateConfig(newValues) {
+    this._config = { ...this._config, ...newValues };
     const event = new CustomEvent("config-changed", {
-      detail: { config: { ...this._config, ...newValues } },
+      detail: { config: { ...this._config } },
       bubbles: true,
       composed: true,
     });
@@ -186,6 +250,8 @@ class RabbitRSSCard extends HTMLElement {
       feeds: ["http://feeds.bbci.co.uk/news/world/rss.xml"],
       refresh_interval: 30,
       max_articles: 20,
+      auto_scroll: false,
+      scroll_speed: "medium",
       header_color: "#03a9f4",
       header_text_color: "#ffffff",
       bg_color: "#ffffff",
@@ -199,6 +265,9 @@ class RabbitRSSCard extends HTMLElement {
     const oldFeeds = JSON.stringify(this._config?.feeds);
     const oldInterval = this._config?.refresh_interval;
     const oldMaxArticles = this._config?.max_articles;
+    const oldAutoScroll = this._config?.auto_scroll;
+    const oldScrollSpeed = this._config?.scroll_speed;
+
     this._config = config || {};
     this._applyStyles();
 
@@ -206,13 +275,19 @@ class RabbitRSSCard extends HTMLElement {
       this._fetchRSS();
     }
 
-    // Update auto-refresh interval if changed
     if (oldInterval !== config.refresh_interval) {
       this._setupAutoRefresh();
     }
 
-    // Re-render if max articles changed
     if (oldMaxArticles !== config.max_articles && this._cachedArticles) {
+      this._render(this._cachedArticles);
+    }
+
+    // Re-apply scroll behaviour if the setting changed
+    if (
+      (oldAutoScroll !== config.auto_scroll || oldScrollSpeed !== config.scroll_speed)
+      && this._cachedArticles
+    ) {
       this._render(this._cachedArticles);
     }
   }
@@ -245,7 +320,25 @@ class RabbitRSSCard extends HTMLElement {
         .header { padding: 16px; font-weight: bold; font-size: 1.1em; display: flex; justify-content: space-between; align-items: center; }
         .refresh-btn { cursor: pointer; transition: transform 0.2s; }
         .refresh-btn:active { transform: rotate(180deg); }
-        .article-list { max-height: 450px; overflow-y: auto; }
+
+        /* ── Normal scrollable list ── */
+        .article-list {
+          max-height: 450px;
+          overflow-y: auto;
+        }
+
+        /* ── Auto-scroll container ── */
+        .article-list.auto-scroll-active {
+          height: 450px;
+          max-height: 450px;
+          overflow: hidden;
+          position: relative;
+        }
+        /* The inner track holds articles × 2 for a seamless loop */
+        .scroll-track {
+          will-change: transform;
+        }
+
         .article { 
           padding: 12px 16px; 
           border-bottom: 1px solid var(--divider-color); 
@@ -316,26 +409,71 @@ class RabbitRSSCard extends HTMLElement {
   }
 
   _setupAutoRefresh() {
-    // Clear existing interval if any
-    if (this._refreshInterval) {
-      clearInterval(this._refreshInterval);
-    }
-
-    // Set up new interval (convert minutes to milliseconds)
-    const intervalMinutes = this._config.refresh_interval || 30;
-    const intervalMs = intervalMinutes * 60 * 1000;
-    
-    this._refreshInterval = setInterval(() => {
-      this._fetchRSS();
-    }, intervalMs);
+    if (this._refreshInterval) clearInterval(this._refreshInterval);
+    const intervalMs = (this._config.refresh_interval || 30) * 60 * 1000;
+    this._refreshInterval = setInterval(() => this._fetchRSS(), intervalMs);
   }
+
+  // ── Auto-scroll helpers ─────────────────────────────────────────────────────
+
+  /**
+   * Pixels-per-second for each speed tier.
+   * These values feel comfortable at typical article-thumbnail heights (~104 px/article).
+   */
+  _scrollPps() {
+    const map = { slow: 25, medium: 55, fast: 110 };
+    return map[this._config.scroll_speed || "medium"];
+  }
+
+  _startAutoScroll() {
+    this._stopAutoScroll(); // cancel any existing loop first
+
+    const el = this.content;
+    const pps = this._scrollPps();
+    let lastTs = null;
+
+    const tick = (ts) => {
+      if (!this._config.auto_scroll) { this._stopAutoScroll(); return; }
+      if (lastTs === null) lastTs = ts;
+
+      const delta = ts - lastTs;           // ms since last frame
+      lastTs = ts;
+
+      const track = el.querySelector(".scroll-track");
+      if (!track) { this._stopAutoScroll(); return; }
+
+      // Move the track upward by translating its Y position
+      this._scrollPos = (this._scrollPos || 0) + (pps * delta) / 1000;
+
+      // The track contains articles duplicated, so half its height = one full pass
+      const halfHeight = track.scrollHeight / 2;
+      if (this._scrollPos >= halfHeight) {
+        this._scrollPos -= halfHeight;  // seamless jump back to the start
+      }
+
+      track.style.transform = `translateY(-${this._scrollPos}px)`;
+      this._rafId = requestAnimationFrame(tick);
+    };
+
+    this._scrollPos = 0;
+    this._rafId = requestAnimationFrame(tick);
+  }
+
+  _stopAutoScroll() {
+    if (this._rafId) {
+      cancelAnimationFrame(this._rafId);
+      this._rafId = null;
+    }
+  }
+
+  // ── Lifecycle ───────────────────────────────────────────────────────────────
 
   disconnectedCallback() {
-    // Clean up interval when card is removed
-    if (this._refreshInterval) {
-      clearInterval(this._refreshInterval);
-    }
+    if (this._refreshInterval) clearInterval(this._refreshInterval);
+    this._stopAutoScroll();
   }
+
+  // ── Data fetching ───────────────────────────────────────────────────────────
 
   async _fetchRSS() {
     const feeds = (this._config && this._config.feeds) || [];
@@ -348,7 +486,10 @@ class RabbitRSSCard extends HTMLElement {
     if (this.content) this.content.style.opacity = "0.5";
 
     try {
-      const promises = validFeeds.map(url => fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`).then(res => res.json()));
+      const promises = validFeeds.map(url =>
+        fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}&cache_boost=${Date.now()}`)
+          .then(res => res.json())
+      );
       const results = await Promise.all(promises);
       let allItems = [];
       results.forEach(data => {
@@ -357,12 +498,10 @@ class RabbitRSSCard extends HTMLElement {
         }
       });
       allItems.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
-      
-      // Cache all articles for potential re-rendering with different max_articles
       this._cachedArticles = allItems;
       this._render(allItems);
     } catch (e) {
-      if(this.content) this.content.innerHTML = `<div style="padding:20px;">Error loading feeds.</div>`;
+      if (this.content) this.content.innerHTML = `<div style="padding:20px;">Error loading feeds.</div>`;
     } finally {
       if (this.content) this.content.style.opacity = "1";
     }
@@ -374,18 +513,21 @@ class RabbitRSSCard extends HTMLElement {
     return tmp.textContent || tmp.innerText || "";
   }
 
+  // ── Rendering ───────────────────────────────────────────────────────────────
+
   _render(articles) {
     if (!this.content) return;
-    
-    // Limit articles based on max_articles config
+
+    // Always stop any running scroll loop before rebuilding the DOM
+    this._stopAutoScroll();
+
     const maxArticles = this._config.max_articles || 20;
     const displayArticles = articles.slice(0, maxArticles);
-    
-    this.content.innerHTML = displayArticles.map(item => {
+
+    const articleHTML = displayArticles.map(item => {
       const thumbnail = item.thumbnail || item.enclosure?.link || '';
       const description = this._stripHtml(item.description || item.content || '');
       const summary = description.substring(0, 150) + (description.length > 150 ? '...' : '');
-      
       return `
         <div class="article" onclick="window.open('${item.link}', '_blank')">
           ${thumbnail ? `<img class="article-thumbnail" src="${thumbnail}" alt="" loading="lazy">` : ''}
@@ -397,6 +539,18 @@ class RabbitRSSCard extends HTMLElement {
         </div>
       `;
     }).join('');
+
+    if (this._config.auto_scroll && displayArticles.length > 0) {
+      // Switch container to overflow:hidden mode and build the duplicated track
+      this.content.classList.add("auto-scroll-active");
+      // Duplicate articles so the loop resets invisibly at the halfway point
+      this.content.innerHTML = `<div class="scroll-track">${articleHTML}${articleHTML}</div>`;
+      this._startAutoScroll();
+    } else {
+      // Normal scrollable list
+      this.content.classList.remove("auto-scroll-active");
+      this.content.innerHTML = articleHTML;
+    }
   }
 }
 
