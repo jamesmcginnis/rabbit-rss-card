@@ -1,5 +1,8 @@
 # Rabbit RSS Card
 A sleek, multi-feed RSS reader for Home Assistant with thumbnails, summaries, and deep color customization.
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jamesmcginnis&repository=rabbit-rss-card&category=plugin)
+
 ![Card Preview](Preview1.png)
 ![Editor Preview](Preview2.png)
 ## Key Features
@@ -9,6 +12,7 @@ A sleek, multi-feed RSS reader for Home Assistant with thumbnails, summaries, an
 📰 **Multi-Feed Support** - Combine multiple RSS feeds into one unified view
 🎨 **Full Customization** - Customize header colors, background colors, text colors, and summary colors to match your dashboard
 🔄 **Auto-Refresh** - Feeds automatically refresh at configurable intervals (default: 30 minutes)
+🎞️ **Continuous Auto-Scroll** - Articles scroll in a seamless loop at your chosen speed (Slow, Medium, or Fast)
 📱 **Responsive Design** - Works perfectly on desktop, tablet, and mobile devices with flexible layouts
 🗂️ **Auto-Sorting** - Articles automatically sorted by date across all feeds
 🎯 **Clean Interface** - Scrollable list with smart text overflow keeps your dashboard organized
@@ -17,13 +21,15 @@ A sleek, multi-feed RSS reader for Home Assistant with thumbnails, summaries, an
 2. Use the visual editor to add your RSS feed URLs
 3. Set your preferred refresh interval (optional)
 4. Customize colors to match your theme
-5. Done!
+5. Optionally enable continuous auto-scroll in the Scrolling section
+6. Done!
 ## Perfect For
 - News aggregation from multiple sources with images
 - Blog reading with previews
 - Podcast feed monitoring
 - YouTube channel updates with thumbnails
 - Any RSS/Atom feed with or without media
+- Ambient news displays and dashboard ticker views (with auto-scroll)
 ## Example Feeds
 - **News**: New York Times, BBC, Reuters, CNN
 - **Tech**: The Verge, TechCrunch, Ars Technica, Wired
@@ -42,6 +48,8 @@ All configuration can be done through the visual editor, or manually via YAML if
 ### Available Options
 - **Title**: Set your card header title
 - **Refresh Interval**: Set how often feeds refresh (1-1440 minutes)
+- **Auto-Scroll**: Toggle continuous looping scroll through all articles
+- **Scroll Speed**: Choose from Slow 🐢, Medium 🐇, or Fast ⚡ scroll speeds (visible when auto-scroll is enabled)
 - **Feeds**: Add multiple RSS feed URLs
 - **Header Color**: Customize the header background
 - **Header Text Color**: Customize the header text
@@ -56,9 +64,11 @@ All configuration can be done through the visual editor, or manually via YAML if
 - Compatible with RSS 2.0 and Atom feeds
 - Extracts thumbnails from `thumbnail` or `enclosure` fields
 - Strips HTML from descriptions for clean summary text
-- Maximum card height: 450px (scrollable)
+- Maximum card height: 450px (scrollable or auto-scrolling)
 - Articles sorted by publication date (newest first)
 - Automatic refresh based on configured interval
+- Auto-scroll uses `requestAnimationFrame` for smooth, frame-rate-independent motion
+- Auto-scroll creates a seamless loop by rendering articles twice and resetting position at the halfway point
 - CORS-friendly implementation
 - Lazy loading for thumbnail images
 ## Support
