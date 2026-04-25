@@ -493,7 +493,8 @@ class RabbitRSSCard extends HTMLElement {
 
         .article-list { max-height:450px; overflow-y:auto; }
         .article-list.auto-scroll-active { height:450px; max-height:450px; overflow:hidden; position:relative; }
-        .article-list.drag-scroll { overflow-y:hidden; cursor:grab; user-select:none; -webkit-user-select:none; }
+        .article-list.drag-scroll { overflow-y:scroll; cursor:grab; user-select:none; -webkit-user-select:none; scrollbar-width:none; }
+        .article-list.drag-scroll::-webkit-scrollbar { display:none; }
         .article-list.drag-scroll.is-dragging { cursor:grabbing; }
         .scroll-track { will-change:transform; }
 
@@ -662,11 +663,52 @@ class RabbitRSSCard extends HTMLElement {
 
     const CLICK_THRESHOLD = 5; // px — below this is a tap, not a drag
 
-    const onPointerDown = (e) => {
-      // Ignore if clicking a button inside an article (e.g. nothing in this card, but defensive)
+    const getY = (e) => e.touches ? e.touches[0].clientY : e.clientY;
+
+    const onMouseDown = (e) => {
       isDragging = true;
       hasMoved   = false;
-      startY         = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
+      startY         = getY(e);
+      startScrollTop = el.scrollTop;
+      lastY = startY;
+      lastT = Date.now();
+      velY  = 0;
+      if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+      el.classList.add('is-dragging');
+      // Attach move/up to document so drag works even if cursor leaves the element
+      document.addEventListener('mousemove', onMouseMove, { passive: false });
+      document.addEventListener('mouseup',   onMouseUp);
+      e.preventDefault();
+    };
+
+    const onMouseMove = (e) => {
+      if (!isDragging) return;
+      const clientY = getY(e);
+      const dy = clientY - startY;
+      if (Math.abs(dy) > CLICK_THRESHOLD) hasMoved = true;
+      const now = Date.now();
+      const dt  = now - lastT || 1;
+      velY  = (clientY - lastY) / dt;
+      lastY = clientY;
+      lastT = now;
+      el.scrollTop = startScrollTop - dy;
+      e.preventDefault();
+    };
+
+    const onMouseUp = () => {
+      if (!isDragging) return;
+      isDragging = false;
+      el.classList.remove('is-dragging');
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup',   onMouseUp);
+      _startMomentum();
+    };
+
+    // Touch events stay on the element (browsers require passive:false for preventDefault)
+    const onTouchStart = (e) => {
+      isDragging = true;
+      hasMoved   = false;
+      startY         = getY(e);
       startScrollTop = el.scrollTop;
       lastY = startY;
       lastT = Date.now();
@@ -676,47 +718,44 @@ class RabbitRSSCard extends HTMLElement {
       e.preventDefault();
     };
 
-    const onPointerMove = (e) => {
+    const onTouchMove = (e) => {
       if (!isDragging) return;
-      const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
+      const clientY = getY(e);
       const dy = clientY - startY;
       if (Math.abs(dy) > CLICK_THRESHOLD) hasMoved = true;
       const now = Date.now();
       const dt  = now - lastT || 1;
-      velY  = (clientY - lastY) / dt;   // px/ms
+      velY  = (clientY - lastY) / dt;
       lastY = clientY;
       lastT = now;
       el.scrollTop = startScrollTop - dy;
       e.preventDefault();
     };
 
-    const onPointerUp = (e) => {
+    const onTouchEnd = () => {
       if (!isDragging) return;
       isDragging = false;
       el.classList.remove('is-dragging');
+      _startMomentum();
+    };
 
-      // If barely moved, treat as a tap — let the click event fire naturally
+    const _startMomentum = () => {
       if (!hasMoved) return;
-
-      // Momentum: keep scrolling, decelerating at 5% per frame
-      const DECEL = 0.92;
+      const DECEL   = 0.92;
       const MIN_VEL = 0.05;
       const step = () => {
         velY *= DECEL;
         if (Math.abs(velY) < MIN_VEL) return;
-        el.scrollTop -= velY * 16; // 16ms ≈ one frame
+        el.scrollTop -= velY * 16;
         rafId = requestAnimationFrame(step);
       };
       rafId = requestAnimationFrame(step);
     };
 
-    el.addEventListener('mousedown',  onPointerDown,  { passive: false });
-    el.addEventListener('mousemove',  onPointerMove,  { passive: false });
-    el.addEventListener('mouseup',    onPointerUp);
-    el.addEventListener('mouseleave', onPointerUp);
-    el.addEventListener('touchstart', onPointerDown,  { passive: false });
-    el.addEventListener('touchmove',  onPointerMove,  { passive: false });
-    el.addEventListener('touchend',   onPointerUp);
+    el.addEventListener('mousedown',  onMouseDown,  { passive: false });
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    el.addEventListener('touchmove',  onTouchMove,  { passive: false });
+    el.addEventListener('touchend',   onTouchEnd);
 
     // Suppress click events that follow a real drag (not a tap)
     el._dragClickSuppressor = (e) => {
@@ -725,20 +764,24 @@ class RabbitRSSCard extends HTMLElement {
     el.addEventListener('click', el._dragClickSuppressor, true);
 
     // Store cleanup refs
-    el._dragHandlers = { onPointerDown, onPointerMove, onPointerUp };
+    el._dragHandlers = { onMouseDown, onTouchStart, onTouchMove, onTouchEnd };
+    el._dragDocHandlers = { onMouseMove, onMouseUp };
     el._dragRafRef   = () => { if (rafId) cancelAnimationFrame(rafId); };
   }
 
   _teardownDragScroll(el) {
     if (!el._dragHandlers) return;
-    const { onPointerDown, onPointerMove, onPointerUp } = el._dragHandlers;
-    el.removeEventListener('mousedown',  onPointerDown);
-    el.removeEventListener('mousemove',  onPointerMove);
-    el.removeEventListener('mouseup',    onPointerUp);
-    el.removeEventListener('mouseleave', onPointerUp);
-    el.removeEventListener('touchstart', onPointerDown);
-    el.removeEventListener('touchmove',  onPointerMove);
-    el.removeEventListener('touchend',   onPointerUp);
+    const { onMouseDown, onTouchStart, onTouchMove, onTouchEnd } = el._dragHandlers;
+    el.removeEventListener('mousedown',  onMouseDown);
+    el.removeEventListener('touchstart', onTouchStart);
+    el.removeEventListener('touchmove',  onTouchMove);
+    el.removeEventListener('touchend',   onTouchEnd);
+    // Also clean up any document-level listeners that may still be attached
+    if (el._dragDocHandlers) {
+      document.removeEventListener('mousemove', el._dragDocHandlers.onMouseMove);
+      document.removeEventListener('mouseup',   el._dragDocHandlers.onMouseUp);
+      delete el._dragDocHandlers;
+    }
     if (el._dragClickSuppressor) {
       el.removeEventListener('click', el._dragClickSuppressor, true);
       delete el._dragClickSuppressor;
