@@ -1,6 +1,6 @@
 {
   "name": "Rabbit RSS Card",
+  "render_readme": true,
   "filename": "rabbit-rss-card.js",
-  "content_in_root": true,
-  "render_readme": true
+  "type": "plugin"
 }
