@@ -4,6 +4,8 @@ A sleek, multi-feed RSS reader for Home Assistant with thumbnails, summaries, an
 ![JavaScript](https://img.shields.io/badge/JavaScript-Module-yellow.svg)
 ![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)
 
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jamesmcginnis&repository=rabbit-rss-card&category=plugin)
+
 ## Previews
 | Card View | Visual Editor |
 | :---: | :---: |
@@ -18,6 +20,7 @@ A sleek, multi-feed RSS reader for Home Assistant with thumbnails, summaries, an
 - **Visual Editor**: No YAML required! Add feeds and customize colors directly in the Home Assistant UI
 - **Full Customization**: Change background colors, header colors, text styles, and summary text color to match your dashboard theme
 - **Auto-Refresh**: Feeds automatically refresh at configurable intervals (default: 30 minutes)
+- **Continuous Auto-Scroll**: Articles scroll continuously in a seamless loop, with three configurable speed tiers
 - **Auto-Sorting**: Articles are automatically sorted by date, regardless of which feed they come from
 - **Responsive Design**: Optimized for both desktop and mobile viewports with flexible layouts
 - **Clean Interface**: Scrollable article list with a maximum height of 450px keeps your dashboard organized
@@ -58,6 +61,7 @@ The Rabbit RSS Card is designed to be configured through the UI:
    - Customize colors and appearance
    - Set your card title
    - Configure refresh interval (1-1440 minutes)
+   - Enable continuous auto-scroll and choose a scroll speed
 
 ### YAML Configuration (Optional)
 If you prefer manual YAML configuration, you can use the following structure:
@@ -67,6 +71,8 @@ type: custom:rabbit-rss-card
 title: "Tech News"
 refresh_interval: 30
 max_articles: 20
+auto_scroll: true
+scroll_speed: "medium"
 header_color: "#2c3e50"
 header_text_color: "#ecf0f1"
 bg_color: "#ffffff"
@@ -85,6 +91,8 @@ feeds:
 | `title` | string | "Rabbit RSS" | Card header title |
 | `refresh_interval` | number | 30 | Auto-refresh interval in minutes (1-1440) |
 | `max_articles` | number | 20 | Maximum number of articles to display (1-100) |
+| `auto_scroll` | boolean | false | Enable continuous auto-scrolling through articles |
+| `scroll_speed` | string | "medium" | Auto-scroll speed: `"slow"`, `"medium"`, or `"fast"` |
 | `header_color` | string | "#03a9f4" | Background color for the card header |
 | `header_text_color` | string | "#ffffff" | Text color for the card header |
 | `bg_color` | string | "#ffffff" | Background color for the card body |
@@ -105,6 +113,17 @@ The card fetches RSS feeds using the RSS2JSON API, which converts RSS/Atom feeds
 
 Articles are automatically sorted by publication date with the newest items appearing first. The card will automatically refresh feeds at the configured interval.
 
+### Auto-Scroll
+When enabled, articles scroll continuously through the card viewport in a seamless loop — once the last article passes, the feed begins again from the top with no visible jump. Three speed tiers are available:
+
+| Speed | Behaviour |
+|-------|-----------|
+| 🐢 Slow | Gentle, easy-to-read pace |
+| 🐇 Medium | Comfortable default speed |
+| ⚡ Fast | Rapid ticker-style scrolling |
+
+Auto-scroll can be toggled and its speed changed at any time through the visual editor. Manual scrolling is restored instantly by turning the option off.
+
 ## RSS Feed Compatibility
 
 The card works with any standard RSS or Atom feed. Thumbnails are extracted from:
@@ -118,7 +137,7 @@ If a feed doesn't provide images, articles will display without thumbnails.
 ### Articles not loading
 - Verify your RSS feed URLs are valid and publicly accessible
 - Check browser console for errors
-- Try adding `?cache_boost=${Date.now()}` is automatically appended to prevent caching issues
+- `cache_boost` is automatically appended to each request to prevent caching issues
 
 ### Thumbnails not showing
 - Not all RSS feeds include image data
@@ -134,6 +153,10 @@ If a feed doesn't provide images, articles will display without thumbnails.
 - Verify the `refresh_interval` is set to a value between 1 and 1440 minutes
 - Check browser console for any errors
 - The interval timer is reset when the card configuration changes
+
+### Auto-scroll not looping smoothly
+- Ensure `max_articles` is set high enough to produce more content than the 450px viewport
+- With very few articles the loop may appear to jump — adding more feeds or increasing `max_articles` will smooth this out
 
 ## Credits
 
